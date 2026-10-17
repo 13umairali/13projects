@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="36dp"
+    android:orientation="horizontal" android:gravity="top" android:layoutDirection="ltr">
+    <FrameLayout android:layout_width="32dp" android:layout_height="32dp" android:layout_marginEnd="8dp">
+        <ImageView android:id="@+id/notification_brand"
+            android:layout_width="30dp" android:layout_height="30dp"
+            android:src="@drawable/notification_brand" android:scaleType="fitCenter" android:contentDescription="Dahimail" />
+        <ImageView android:id="@+id/notification_type_icon"
+            android:layout_width="18dp" android:layout_height="18dp"
+            android:layout_gravity="bottom|right" android:padding="4dp"
+            android:background="@drawable/notification_category_badge"
+            android:tint="@android:color/white" android:importantForAccessibility="no" />
+    </FrameLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+        android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="vertical">
+        <TextView android:id="@+id/notification_sender"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title"
+            android:textSize="12sp" android:textStyle="bold" android:includeFontPadding="false"
+            android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/notification_body"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification"
+            android:layout_marginTop="1dp" android:textSize="11sp" android:includeFontPadding="false"
+            android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="58dp" android:layout_height="wrap_content"
+        android:orientation="vertical" android:gravity="right" android:layout_marginStart="8dp">
+        <TextView android:id="@+id/notification_time" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Info"
+            android:textSize="9sp" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
+        <ImageView android:id="@+id/notification_avatar"
+            android:layout_width="18dp" android:layout_height="18dp" android:layout_marginTop="2dp"
+            android:scaleType="centerCrop" android:importantForAccessibility="no" />
+    </LinearLayout>
+</LinearLayout>
