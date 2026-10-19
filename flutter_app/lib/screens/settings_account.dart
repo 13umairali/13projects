@@ -57,9 +57,8 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         ],
         fields: const [
           F('name', 'Full name', required: true),
-          F('email', 'Email', type: FT.email, required: true),
+          F('email', 'Email', type: FT.email, required: true, readOnly: true),
           F('phone', 'Phone', type: FT.phone),
-          F('timezone', 'Timezone', hint: 'e.g. Asia/Karachi'),
         ],
         onSubmit: (v) async {
           await Api.of(c).multipart('me', {for (final e in v.entries) if (e.value != null) e.key: '${e.value}'}, fileField: 'avatar', filePath: _picked);

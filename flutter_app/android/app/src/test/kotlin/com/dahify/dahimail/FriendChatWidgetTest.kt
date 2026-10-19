@@ -108,7 +108,7 @@ class FriendChatWidgetTest {
         assertEquals(name, label.text.toString())
         assertEquals(3, label.maxLines)
         assertEquals(View.GONE, view.findViewById<TextView>(R.id.widget_hint).visibility)
-        assertEquals((76 * context.resources.displayMetrics.density).toInt(), photo.parent.let { (it as View).layoutParams.width })
+        assertEquals((48 * context.resources.displayMetrics.density).toInt(), photo.parent.let { (it as View).layoutParams.width })
         FriendChatWidget.clear(context)
         val cleared = shadowOf(manager).getViewFor(id)
         assertEquals(View.GONE, cleared.findViewById<ImageView>(R.id.widget_photo).visibility)

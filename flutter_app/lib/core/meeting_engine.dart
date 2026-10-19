@@ -221,13 +221,58 @@ class MeetingEngine extends ChangeNotifier {
   String get url => '${meeting['url'] ?? ''}';
   bool get locked => meeting['locked'] == true;
   /// Only signed-in people can add friends (guests have no friends list).
-  bool get canInvite => phase == 'in';
+  bool get canInvite => phase == 'in' || phase == 'joining';
   List<MJson>? invitable;
 
   Future<void> loadInvitable() async {
     try {
-      final j = Api.list(await api.getNoCache('meetings/$code/invitable', query: {'pid': '$pid'}));
-      invitable = j;
+      List<MJson> list = [];
+      try {
+        final res = await api.getNoCache('meetings/$code/invitable', query: pid > 0 ? {'pid': '$pid'} : null);
+        dynamic raw = res;
+        if (raw is Map) {
+          if (raw.containsKey('invitable')) {
+            raw = raw['invitable'];
+          } else if (raw.containsKey('users')) {
+            raw = raw['users'];
+          } else if (raw.containsKey('people')) {
+            raw = raw['people'];
+          } else if (raw.containsKey('friends') || raw.containsKey('team')) {
+            final seen = <int>{};
+            for (final k in ['friends', 'team']) {
+              for (final p in Api.list(raw[k])) {
+                final id = (p['id'] as num?)?.toInt();
+                if (id != null && seen.add(id)) list.add(p);
+              }
+            }
+          }
+        }
+        if (list.isEmpty) {
+          list = Api.list(raw);
+        }
+      } catch (_) {}
+
+      if (list.isEmpty) {
+        try {
+          final res = await api.get('people');
+          final d = Api.obj(res);
+          final seen = <int>{};
+          for (final k in ['friends', 'team']) {
+            for (final p in Api.list(d[k])) {
+              final id = (p['id'] as num?)?.toInt();
+              if (id != null && seen.add(id)) list.add(p);
+            }
+          }
+        } catch (_) {}
+      }
+
+      list.sort((a, b) {
+        if (a['online'] == true && b['online'] != true) return -1;
+        if (a['online'] != true && b['online'] == true) return 1;
+        return '${a['name'] ?? ''}'.toLowerCase().compareTo('${b['name'] ?? ''}'.toLowerCase());
+      });
+
+      invitable = list;
       notifyListeners();
     } catch (_) {
       invitable = invitable ?? [];

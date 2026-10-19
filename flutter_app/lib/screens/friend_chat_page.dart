@@ -21,7 +21,6 @@ import '../core/theme.dart';
 import '../core/util.dart';
 import '../core/voice.dart';
 import '../core/widgets.dart';
-import 'call_history_screen.dart';
 import 'chat_media.dart';
 import 'person_profile_page.dart';
 
@@ -52,6 +51,7 @@ class _FriendChatPageState extends State<FriendChatPage> with ConversationVisibi
   bool _cacheReady = false;
   String? _loadError;
   String? _since; // server clock: ask only for edits / deletes after this
+
 
   int get _id => widget.friend['id'] as int;
   String get _name => '${widget.friend['name']}';
@@ -161,6 +161,7 @@ class _FriendChatPageState extends State<FriendChatPage> with ConversationVisibi
       }
       _first = false;
       afterVisibleFrame(_acknowledgeVisible);
+
       if (_cacheAccount != null) await ChatCache.write(_cacheAccount, _id, _msgs);
     } catch (_) {
       if (mounted) setState(() => _loadError = 'Could not sync. Showing saved messages.');
@@ -840,6 +841,7 @@ class _FriendChatPageState extends State<FriendChatPage> with ConversationVisibi
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
       child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+
         if (_files && _editing == null) IconButton(tooltip: 'Attach a file', icon: const Icon(Icons.attach_file_rounded), onPressed: _sending ? null : _attachMenu),
         if (_editing == null) IconButton(tooltip: 'Emoji', icon: const Icon(Icons.emoji_emotions_outlined), onPressed: () => _emojiSheet(_insertEmoji, keepOpen: true)),
         Expanded(child: TextField(controller: _text, minLines: 1, maxLines: 4, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'Message', contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10)))),
@@ -883,11 +885,9 @@ class _FriendChatPageState extends State<FriendChatPage> with ConversationVisibi
               onSelected: (v) {
                 if (v == 'profile') _openProfile();
                 if (v == 'clear_me') _clear();
-                if (v == 'history') pushPage(context, const CallHistoryPage());
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'profile', child: ListTile(dense: true, leading: Icon(Icons.person_outline_rounded), title: Text('View profile'))),
-                const PopupMenuItem(value: 'history', child: ListTile(dense: true, leading: Icon(Icons.history_rounded), title: Text('Call history'))),
                 const PopupMenuItem(value: 'clear_me', child: ListTile(dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('Clear chat'))),
               ],
             ),

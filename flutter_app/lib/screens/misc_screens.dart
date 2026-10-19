@@ -15,6 +15,12 @@ import '../core/widgets.dart';
 import 'contacts_screens.dart';
 import 'inbox_screens.dart';
 import 'tools_screens.dart';
+import 'person_profile_page.dart';
+import 'profile_avatar.dart';
+import 'deals_screens.dart';
+import 'campaign_screens.dart';
+import '../core/menus.dart';
+import '../core/people_card.dart';
 
 // ───────────────────────────── Dashboard & analytics ─────────────────────────────
 
@@ -94,8 +100,8 @@ class StatsView extends StatelessWidget {
 }
 
 class DashboardPage extends StatelessWidget {
-  final void Function(String action) onQuick;
-  const DashboardPage({super.key, required this.onQuick});
+  final void Function(String action)? onQuick;
+  const DashboardPage({super.key, this.onQuick});
 
   static String _greeting() {
     final h = DateTime.now().hour;
@@ -113,41 +119,88 @@ class DashboardPage extends StatelessWidget {
     ];
     final ws = s.user?['active_workspace'];
     final wsName = ws is Map ? '${ws['name'] ?? ''}' : '';
-    return StatsView(
-      endpoint: 'analytics/overview',
-      top: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 4, 16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${_greeting()}, ${s.name.split(' ').first}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 24)),
-            const SizedBox(height: 2),
-            Text([DateFormat('EEEE, d MMMM').format(DateTime.now()), if (wsName.isNotEmpty) wsName].join('  ·  '), style: const TextStyle(color: AppColors.muted, fontSize: 13.5)),
-          ]),
-        ),
-        AppCard(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-          child: Row(children: [
-            for (final a in actions)
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  label: a.$2,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(Rad.m),
-                    onTap: () => onQuick(a.$1),
-                    child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: [
-                      IconTile(a.$3, size: 48),
-                      const SizedBox(height: 8),
-                      Text(a.$2, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ])),
+    final handleQuick = onQuick ?? (_) {};
+
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          const TabBar(
+            labelColor: AppColors.primary,
+            indicatorColor: AppColors.primary,
+            tabs: [
+              Tab(text: 'Overview'),
+              Tab(text: 'AI'),
+              Tab(text: 'Team'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                StatsView(
+                  endpoint: 'analytics/overview',
+                  top: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${_greeting()}, ${s.name.split(' ').first}',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 24)),
+                            const SizedBox(height: 2),
+                            Text(
+                              [DateFormat('EEEE, d MMMM').format(DateTime.now()), if (wsName.isNotEmpty) wsName].join('  ·  '),
+                              style: const TextStyle(color: AppColors.muted, fontSize: 13.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                      AppCard(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                        child: Row(
+                          children: [
+                            for (final a in actions)
+                              Expanded(
+                                child: Semantics(
+                                  button: true,
+                                  label: a.$2,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(Rad.m),
+                                    onTap: () => handleQuick(a.$1),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 4),
+                                      child: Column(
+                                        children: [
+                                          IconTile(a.$3, size: 48),
+                                          const SizedBox(height: 8),
+                                          Text(a.$2,
+                                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                              textAlign: TextAlign.center,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      InsightsSection(onOpen: (url) => handleQuick(_insightAction(url))),
+                    ],
                   ),
                 ),
-              ),
-          ]),
-        ),
-        InsightsSection(onOpen: (url) => onQuick(_insightAction(url))),
-      ]),
+                const StatsView(endpoint: 'analytics/ai'),
+                const StatsView(endpoint: 'analytics/team'),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -167,13 +220,7 @@ class DashboardPage extends StatelessWidget {
 class AnalyticsPage extends StatelessWidget {
   const AnalyticsPage({super.key});
   @override
-  Widget build(BuildContext context) => const DefaultTabController(
-        length: 3,
-        child: Column(children: [
-          TabBar(labelColor: AppColors.primary, indicatorColor: AppColors.primary, tabs: [Tab(text: 'Overview'), Tab(text: 'AI'), Tab(text: 'Team')]),
-          Expanded(child: TabBarView(children: [StatsView(endpoint: 'analytics/overview'), StatsView(endpoint: 'analytics/ai'), StatsView(endpoint: 'analytics/team')])),
-        ]),
-      );
+  Widget build(BuildContext context) => const DashboardPage();
 }
 
 // ───────────────────────────── Knowledge base ─────────────────────────────
@@ -550,52 +597,240 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
 }
 
+class _SearchShellCtl implements ShellCtl {
+  @override void go(Dest d) {}
+  @override void switchMode(ShellMode m) {}
+  @override void quick(String action) {}
+  @override Dest? find(ShellMode m, String id) => null;
+}
+
 class AppSearchDelegate extends SearchDelegate<void> {
   String? _resultsKey;
   Future<List<dynamic>>? _results;
-  AppSearchDelegate() : super(searchFieldLabel: 'Search contacts & conversations');
+
+  AppSearchDelegate() : super(searchFieldLabel: 'Search people, messages, deals & features…');
 
   @override
-  List<Widget> buildActions(BuildContext context) => [if (query.isNotEmpty) IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => query = '')];
-  @override
-  Widget buildLeading(BuildContext context) => IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back), onPressed: () => close(context, null));
-  @override
-  Widget buildSuggestions(BuildContext context) => const Center(child: Text('Type and press search', style: TextStyle(color: AppColors.muted)));
+  List<Widget> buildActions(BuildContext context) => [
+        if (query.isNotEmpty)
+          IconButton(
+            tooltip: 'Clear',
+            icon: const Icon(Icons.close),
+            onPressed: () {
+              query = '';
+              showSuggestions(context);
+            },
+          )
+      ];
 
   @override
-  Widget buildResults(BuildContext context) {
-    if (query.trim().isEmpty) return const SizedBox();
+  Widget buildLeading(BuildContext context) => IconButton(
+        tooltip: 'Back',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => close(context, null),
+      );
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _buildSearchResults(context);
+
+  @override
+  Widget buildResults(BuildContext context) => _buildSearchResults(context);
+
+  Widget _buildSearchResults(BuildContext context) {
+    final q = query.trim();
+    if (q.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('Quick Shortcuts', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.muted)),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const IconTile(Icons.mail_rounded, color: AppColors.primary),
+            title: const Text('Inbox & Emails'),
+            subtitle: const Text('Search messages, attachments and folders'),
+            onTap: () { query = 'email'; showResults(context); },
+          ),
+          ListTile(
+            leading: const IconTile(Icons.people_alt_rounded, color: AppColors.success),
+            title: const Text('Contacts & Friends'),
+            subtitle: const Text('Search people by name, phone or email'),
+            onTap: () { query = 'friend'; showResults(context); },
+          ),
+          ListTile(
+            leading: const IconTile(Icons.handshake_rounded, color: AppColors.warn),
+            title: const Text('Deals & Campaigns'),
+            subtitle: const Text('Search sales pipelines and email campaigns'),
+            onTap: () { query = 'deal'; showResults(context); },
+          ),
+        ],
+      );
+    }
+
     final api = Api.of(context);
-    if (_resultsKey != query.trim()) {
-      _resultsKey = query.trim();
+    if (_resultsKey != q) {
+      _resultsKey = q;
       _results = Future.wait([
-        api.get('contacts', query: {'search': query.trim(), 'per_page': '10'}).catchError((_) => null),
-        api.get('inbox/conversations', query: {'search': query.trim(), 'folder': 'all'}).catchError((_) => null),
+        api.get('friends/search', query: {'q': q}).catchError((_) => null),
+        api.get('contacts', query: {'search': q, 'per_page': '10'}).catchError((_) => null),
+        api.get('inbox/conversations', query: {'search': q, 'folder': 'all'}).catchError((_) => null),
+        api.get('deals', query: {'search': q}).catchError((_) => null),
+        api.get('campaigns', query: {'search': q}).catchError((_) => null),
       ]);
     }
-    final savedContacts = Api.peek('contacts', {'search': query.trim(), 'per_page': '10'});
-    final savedConversations = Api.peek('inbox/conversations', {'search': query.trim(), 'folder': 'all'});
+
+    final matchedFeatures = _findMatchingFeatures(q);
+
     return FutureBuilder<List<dynamic>>(
       future: _results,
-      initialData: savedContacts != null && savedConversations != null ? [savedContacts, savedConversations] : null,
       builder: (c, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final contacts = Api.list(snap.data![0]);
-        final convs = Api.list(snap.data![1]);
-        if (contacts.isEmpty && convs.isEmpty) return const Center(child: Text('No results'));
-        return ListView(children: [
-          if (contacts.isNotEmpty) const SectionHeader('Contacts'),
-          for (final ct in contacts) ListTile(leading: Avatar(contactName(ct)), title: Text(contactName(ct)), subtitle: Text(pick(ct, ['email', 'phone'])), onTap: () => pushPage(c, ContactDetailPage(id: ct['id'] as int))),
-          if (convs.isNotEmpty) const SectionHeader('Conversations'),
-          for (final cv in convs)
-            ListTile(
-              leading: CircleAvatar(backgroundColor: channelById('${cv['channel']}').color.withValues(alpha: 0.14), child: Icon(channelById('${cv['channel']}').icon, color: channelById('${cv['channel']}').color, size: 20)),
-              title: Text('${cv['subject'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text('${cv['contact_name']} · ${cleanPreview('${cv['preview'] ?? ''}')}', maxLines: 1, overflow: TextOverflow.ellipsis),
-              onTap: () => pushPage(c, ConversationDetailPage(id: cv['id'] as int, summary: cv)),
+        if (!snap.hasData && matchedFeatures.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final friends = snap.hasData ? Api.list(snap.data![0]) : [];
+        final contacts = snap.hasData ? Api.list(snap.data![1]) : [];
+        final convs = snap.hasData ? Api.list(snap.data![2]) : [];
+        final deals = snap.hasData ? Api.list(snap.data![3]) : [];
+        final campaigns = snap.hasData ? Api.list(snap.data![4]) : [];
+
+        final empty = matchedFeatures.isEmpty &&
+            friends.isEmpty &&
+            contacts.isEmpty &&
+            convs.isEmpty &&
+            deals.isEmpty &&
+            campaigns.isEmpty;
+
+        if (empty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.search_off_rounded, size: 48, color: AppColors.muted),
+                const SizedBox(height: 12),
+                Text('No results found for "$q"', style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                const Text('Try searching by name, email, phone or feature name', style: TextStyle(fontSize: 13, color: AppColors.muted)),
+              ],
             ),
-        ]);
+          );
+        }
+
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 32),
+          children: [
+            // 1. App Features & Navigation
+            if (matchedFeatures.isNotEmpty) ...[
+              const SectionHeader('App Features & Navigation'),
+              for (final feat in matchedFeatures)
+                ListRow(
+                  icon: feat.icon,
+                  title: feat.label,
+                  subtitle: 'Workspace feature',
+                  onTap: () {
+                    close(c, null);
+                    pushPage(c, feat.builder!(_SearchShellCtl()));
+                  },
+                ),
+            ],
+
+            // 2. Friends & Teammates
+            if (friends.isNotEmpty) ...[
+              const SectionHeader('Friends & Teammates'),
+              for (final f in friends)
+                PeopleCard(
+                  name: '${f['name']}',
+                  subtitle: '${f['email'] ?? f['username'] ?? ''}',
+                  avatar: ProfileAvatar(f, radius: 20),
+                  badges: [
+                    if (f['is_friend'] == true) const PeopleCardBadge('Friend', color: AppColors.success),
+                    if (f['is_team'] == true) const PeopleCardBadge('Team', color: AppColors.primary),
+                  ],
+                  onTap: () {
+                    close(c, null);
+                    pushPage(c, PersonProfilePage(userId: f['id'] as int));
+                  },
+                ),
+            ],
+
+            // 3. CRM Contacts & Customers
+            if (contacts.isNotEmpty) ...[
+              const SectionHeader('Contacts & Customers'),
+              for (final ct in contacts)
+                PeopleCard(
+                  name: contactName(ct),
+                  subtitle: [pick(ct, ['email']), pick(ct, ['company'])].where((e) => e.isNotEmpty).join(' · '),
+                  avatar: Avatar(contactName(ct), url: ct['avatar_url'] as String?, radius: 20),
+                  badges: [if (ct['status'] != null) PeopleCardBadge('${ct['status']}'[0].toUpperCase() + '${ct['status']}'.substring(1))],
+                  onTap: () {
+                    close(c, null);
+                    pushPage(c, ContactDetailPage(id: ct['id'] as int));
+                  },
+                ),
+            ],
+
+            // 4. Conversations & Messages
+            if (convs.isNotEmpty) ...[
+              const SectionHeader('Conversations & Messages'),
+              for (final cv in convs)
+                ListRow(
+                  leading: CircleAvatar(
+                    backgroundColor: channelById('${cv['channel']}').color.withValues(alpha: 0.14),
+                    child: Icon(channelById('${cv['channel']}').icon, color: channelById('${cv['channel']}').color, size: 20),
+                  ),
+                  title: '${cv['subject'] ?? cv['contact_name'] ?? 'Message'}',
+                  subtitle: '${cv['contact_name'] ?? ''} · ${cleanPreview('${cv['preview'] ?? ''}')}',
+                  onTap: () {
+                    close(c, null);
+                    pushPage(c, ConversationDetailPage(id: cv['id'] as int, summary: cv));
+                  },
+                ),
+            ],
+
+            // 5. Deals
+            if (deals.isNotEmpty) ...[
+              const SectionHeader('Deals'),
+              for (final d in deals)
+                ListRow(
+                  icon: Icons.handshake_rounded,
+                  title: '${d['title'] ?? d['name'] ?? 'Deal'}',
+                  subtitle: '${money(d['value'] ?? d['amount'])} · ${d['stage'] ?? ''}',
+                  onTap: () {
+                    close(c, null);
+                    pushPage(c, const DealsPage());
+                  },
+                ),
+            ],
+
+            // 6. Campaigns
+            if (campaigns.isNotEmpty) ...[
+              const SectionHeader('Campaigns'),
+              for (final cp in campaigns)
+                ListRow(
+                  icon: Icons.campaign_rounded,
+                  title: '${cp['name'] ?? cp['title'] ?? 'Campaign'}',
+                  subtitle: '${cp['status'] ?? ''} · ${cp['subject'] ?? ''}',
+                  onTap: () {
+                    close(c, null);
+                    pushPage(c, const CampaignsPage());
+                  },
+                ),
+            ],
+          ],
+        );
       },
     );
+  }
+
+  List<Dest> _findMatchingFeatures(String q) {
+    final search = q.toLowerCase();
+    final matches = <Dest>[];
+    for (final e in menuFor(ShellMode.workspace)) {
+      if (e.dest != null && e.dest!.builder != null) {
+        if (e.dest!.label.toLowerCase().contains(search) || e.dest!.id.toLowerCase().contains(search)) {
+          matches.add(e.dest!);
+        }
+      }
+    }
+    return matches.take(5).toList();
   }
 }

@@ -6,7 +6,6 @@ import '../core/calls.dart';
 import '../core/paged.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
-import 'call_history_screen.dart';
 import 'contacts_screens.dart';
 import 'friend_chat_page.dart';
 import 'friends_screens.dart';
@@ -189,16 +188,7 @@ class _PeoplePageState extends State<PeoplePage> {
               child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
                   children: [
-                    AppCard(
-                        padding: EdgeInsets.zero,
-                        child: ListTile(
-                            dense: true,
-                            leading: const IconTile(Icons.history_rounded),
-                            title: const Text('Call history',
-                                style: TextStyle(fontWeight: FontWeight.w600)),
-                            trailing: const Icon(Icons.chevron_right_rounded,
-                                color: AppColors.muted),
-                            onTap: () => pushPage(c, const CallHistoryPage()))),
+
                     if (f == 'team')
                       AppCard(
                           padding: EdgeInsets.zero,

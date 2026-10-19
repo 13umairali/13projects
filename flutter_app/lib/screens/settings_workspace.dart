@@ -504,20 +504,18 @@ class _WorkspaceOverviewPageState extends State<WorkspaceOverviewPage> {
   static const _groups = <(String, List<(String, String, String, IconData)>)>[
     ('Daily work', [
       ('meetings', 'Meetings', 'Scheduled meetings with your team and customers', Icons.co_present_rounded),
-      ('dashboard', 'Dashboard', 'Numbers for today and quick actions', Icons.dashboard_rounded),
+      ('dashboard', 'Dashboard & Analytics', 'Greeting, quick actions, insights & performance trends', Icons.dashboard_rounded),
       ('contacts', 'Contacts', 'Customers: people and companies you work with', Icons.contacts_rounded),
       ('deals', 'Deals', 'Pipelines and stages', Icons.handshake_rounded),
       ('campaigns', 'Campaigns', 'Email many contacts at once', Icons.campaign_rounded),
       ('workflows', 'Workflows', 'Automate repeated tasks', Icons.account_tree_rounded),
     ]),
     ('Insights', [
-      ('analytics', 'Analytics', 'Performance and trends', Icons.insights_rounded),
       ('activity', 'Activity', 'Recent events in your workspace', Icons.history_rounded),
     ]),
     ('Connections', [
       ('ws_email', 'Email accounts', 'Gmail, Outlook or your own mailbox', Icons.alternate_email_rounded),
       ('ws_mailserver', 'Mail server (IMAP & SMTP)', 'Use your mailbox in other apps or websites', Icons.dns_rounded),
-      ('ws_deliverability', 'Email deliverability', 'Check SPF, DKIM and DMARC for your domain', Icons.mark_email_read_rounded),
       ('ws_channels', 'Channels', 'WhatsApp, Telegram, SMS, Slack, live chat', Icons.cell_tower_rounded),
       ('ws_integrations', 'Integrations', 'Slack, Google Calendar, Salesforce', Icons.extension_rounded),
       ('ws_webhooks', 'Webhooks', 'Delivery logs for incoming events', Icons.webhook_rounded),
@@ -576,17 +574,49 @@ class _WorkspaceOverviewPageState extends State<WorkspaceOverviewPage> {
     final list = _list;
     if (list == null) return const Padding(padding: EdgeInsets.all(14), child: SkeletonBlock(height: 52));
     final active = list.firstWhere((w) => w['active'] == true, orElse: () => list.isEmpty ? <String, dynamic>{} : list.first);
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(children: [
-        Avatar('${active['name'] ?? 'W'}', url: active['logo_url'] as String?, radius: 26),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${active['name'] ?? 'Workspace'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text('${active['role'] ?? ''} · ${_counts['members'] ?? 0} members · ${_counts['contacts'] ?? 0} contacts', style: const TextStyle(color: AppColors.muted, fontSize: 13)),
-        ])),
-        const Chip(label: Text('Active'), visualDensity: VisualDensity.compact),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(children: [
+        Row(children: [
+          Avatar('${active['name'] ?? 'W'}', url: active['logo_url'] as String?, radius: 30),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${active['name'] ?? 'Workspace'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
+            Text('Role: ${active['role'] ?? 'Member'}', style: const TextStyle(color: AppColors.muted, fontSize: 13, fontWeight: FontWeight.w500)),
+          ])),
+          const Chip(label: Text('Active Workspace'), visualDensity: VisualDensity.compact),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Team Members', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                const SizedBox(height: 2),
+                Text('${_counts['members'] ?? 0}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Contacts', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                const SizedBox(height: 2),
+                Text('${_counts['contacts'] ?? 0}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
+        ]),
       ]),
     );
   }

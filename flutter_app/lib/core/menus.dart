@@ -75,7 +75,6 @@ Dest get _kb => _d('kb', 'Knowledge base', Icons.menu_book_rounded, (_) => const
 Dest get _workflows => _d('workflows', 'Workflows', Icons.account_tree_rounded, (_) => const WorkflowsPage());
 Dest get _campaigns => _d('campaigns', 'Campaigns', Icons.campaign_rounded, (_) => const CampaignsPage());
 Dest get _mailServer => _d('mailserver', 'Mail server', Icons.dns_rounded, (_) => const MailServerPage());
-Dest get _deliverability => _d('deliverability', 'Email deliverability', Icons.mark_email_read_rounded, (_) => const DeliverabilityPage());
 Dest get _analytics => _d('analytics', 'Analytics', Icons.insights_rounded, (_) => const AnalyticsPage());
 Dest get _activity => _d('activity', 'Activity', Icons.history_rounded, (_) => const ActivityPage());
 Dest get _deals => _d('deals', 'Deals', Icons.handshake_rounded, (_) => const DealsPage());
@@ -117,7 +116,7 @@ List<MenuEntry> menuFor(ShellMode mode) {
               if (d != null) s.go(d);
             }))),
         // Daily work, insights, tools and help (opened from the rows of the Workspace hub – there is no side menu any more)
-        MenuEntry(_d('dashboard', 'Dashboard', Icons.dashboard_rounded, (s) => DashboardPage(onQuick: s.quick))),
+        MenuEntry(_d('dashboard', 'Dashboard & Analytics', Icons.dashboard_rounded, (s) => DashboardPage(onQuick: s.quick))),
         MenuEntry(_d('meetings', 'Meetings', Icons.co_present_rounded, (_) => const MeetingsPage())),
         MenuEntry(_d('contacts', 'Contacts', Icons.contacts_rounded, (_) => const ContactsPage())),
         MenuEntry(_deals),
@@ -133,7 +132,6 @@ List<MenuEntry> menuFor(ShellMode mode) {
         const MenuEntry.section('Connections'),
         MenuEntry(_wrap('ws_email', _email)),
         MenuEntry(_wrap('ws_mailserver', _mailServer)),
-        MenuEntry(_wrap('ws_deliverability', _deliverability)),
         MenuEntry(_wrap('ws_channels', _channels)),
         MenuEntry(_wrap('ws_integrations', _integrations)),
         MenuEntry(_wrap('ws_webhooks', _webhooks)),

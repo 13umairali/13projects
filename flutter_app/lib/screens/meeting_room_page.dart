@@ -328,7 +328,6 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   toast(context, 'Invitation copied – paste it in any app to share');
                 },
               ),
-            IconButton(tooltip: 'Call audio: ${_e.audio.label}', icon: Icon(_e.audio.icon, color: Colors.white), onPressed: () => showCallAudioPicker(context, _e.audio, _e.selectAudioOutput)),
           ]),
         ),
       ),
@@ -452,32 +451,57 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
 
   Widget _controls() {
     final isCall = _e.meeting['kind'] == 'call';
-    final more = <Widget>[
-      if (_e.hasVideoTrack) _round(Icons.cameraswitch_rounded, _e.switchCamera, label: 'Flip'),
-      _round(Icons.people_alt_rounded, _participantsSheet, label: 'People', badge: _e.isMod ? _e.waiting.length : 0),
-      _round(Icons.chat_bubble_rounded, _chatSheet, label: 'Chat', badge: _e.unreadChat),
-      if (_e.recCanStart || (_e.recSession != null && _e.recCanStop))
-        _round(Icons.fiber_manual_record_rounded, _e.recToggle, danger: _e.recSession != null,
-            label: _e.recSession == null ? (_e.recMode == 3 ? 'Ask to record' : _e.recMode == 5 ? 'Record (private)' : 'Record') : (_e.recSession!['status'] == 'pending' ? 'Cancel' : 'Stop rec')),
-      _round(Icons.back_hand_rounded, _e.toggleHand, active: _e.hand, label: _e.hand ? 'Lower' : 'Raise'),
-      if (_e.isMod) _round(Icons.more_horiz_rounded, _hostSheet, label: 'Host'),
-    ];
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
-      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xEE111118)])),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [for (var i = 0; i < more.length; i++) ...[if (i > 0) const SizedBox(width: 18), more[i]]]),
+
+    void showMoreMenu() {
+      showModalBottomSheet(
+        context: context,
+        showDragHandle: true,
+        builder: (c) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Padding(padding: EdgeInsets.all(16), child: Text('More options', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            if (_e.hasVideoTrack)
+              ListTile(leading: const Icon(Icons.cameraswitch_rounded), title: const Text('Flip camera'), onTap: () { Navigator.pop(c); _e.switchCamera(); }),
+            ListTile(
+              leading: const Icon(Icons.people_alt_rounded),
+              title: const Text('People'),
+              trailing: _e.isMod && _e.waiting.isNotEmpty ? Chip(label: Text('${_e.waiting.length}'), backgroundColor: AppColors.danger, labelStyle: const TextStyle(color: Colors.white)) : null,
+              onTap: () { Navigator.pop(c); _participantsSheet(); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.chat_bubble_rounded),
+              title: const Text('Chat'),
+              trailing: _e.unreadChat > 0 ? Chip(label: Text('${_e.unreadChat}'), backgroundColor: AppColors.primary, labelStyle: const TextStyle(color: Colors.white)) : null,
+              onTap: () { Navigator.pop(c); _chatSheet(); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.back_hand_rounded),
+              title: Text(_e.hand ? 'Lower hand' : 'Raise hand'),
+              onTap: () { Navigator.pop(c); _e.toggleHand(); },
+            ),
+            if (_e.recCanStart || (_e.recSession != null && _e.recCanStop))
+              ListTile(
+                leading: Icon(Icons.fiber_manual_record_rounded, color: _e.recSession != null ? AppColors.danger : null),
+                title: Text(_e.recSession == null ? (_e.recMode == 3 ? 'Ask to record' : _e.recMode == 5 ? 'Record (private)' : 'Record') : (_e.recSession!['status'] == 'pending' ? 'Cancel recording' : 'Stop recording')),
+                onTap: () { Navigator.pop(c); _e.recToggle(); },
+              ),
+            if (_e.isMod)
+              ListTile(leading: const Icon(Icons.more_horiz_rounded), title: const Text('Host controls'), onTap: () { Navigator.pop(c); _hostSheet(); }),
+            ListTile(leading: const Icon(Icons.picture_in_picture_alt_rounded), title: const Text('Minimize'), onTap: () { Navigator.pop(c); _minimize(); }),
+            const SizedBox(height: 16),
+          ]),
         ),
-        const SizedBox(height: 10),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-          _round(_e.micOn ? Icons.mic_rounded : Icons.mic_off_rounded, _e.toggleMic, off: !_e.micOn, label: _e.micOn ? 'Mute' : 'Unmute'),
-          _round(_e.camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded, _e.toggleCam, off: !_e.camOn, label: _e.camOn ? 'Video' : 'Video off'),
-          _round(_e.audio.icon, () => showCallAudioPicker(context, _e.audio, _e.selectAudioOutput), active: _e.speaker, label: 'Audio'),
-          _round(Icons.picture_in_picture_alt_rounded, _minimize, label: 'Minimize'),
-          _round(Icons.call_end_rounded, _endPressed, danger: true, label: isCall ? 'End' : 'Leave'),
-        ]),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xEE111118)])),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+        _round(_e.micOn ? Icons.mic_rounded : Icons.mic_off_rounded, _e.toggleMic, off: !_e.micOn, label: _e.micOn ? 'Mute' : 'Unmute'),
+        _round(_e.camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded, _e.toggleCam, off: !_e.camOn, label: _e.camOn ? 'Video' : 'Video off'),
+        _round(_e.audio.icon, () => showCallAudioPicker(context, _e.audio, _e.selectAudioOutput), active: _e.speaker, label: 'Audio'),
+        _round(Icons.more_horiz_rounded, showMoreMenu, label: 'More'),
+        _round(Icons.call_end_rounded, _endPressed, danger: true, label: isCall ? 'End' : 'Leave'),
       ]),
     );
   }
@@ -488,7 +512,18 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (c) => AnimatedBuilder(animation: _e, builder: (c2, _) => build(c2)),
+      backgroundColor: AppColors.surfaceDark,
+      builder: (c) => Theme(
+        data: Theme.of(context).copyWith(
+          brightness: Brightness.dark,
+          colorScheme: ColorScheme.dark(
+            surface: AppColors.surfaceDark,
+            onSurface: Colors.white,
+            primary: AppColors.primary,
+          ),
+        ),
+        child: AnimatedBuilder(animation: _e, builder: (c2, _) => build(c2)),
+      ),
     );
   }
 
@@ -511,7 +546,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   title: Text('${w['name']}${w['guest'] == true ? '  (guest)' : ''}'),
                   trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                     TextButton(onPressed: () => _host('deny', (w['pid'] as num).toInt()), child: const Text('Deny', style: TextStyle(color: AppColors.danger))),
-                    FilledButton(onPressed: () => _host('admit', (w['pid'] as num).toInt()), child: const Text('Admit')),
+                    FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(72, 40), padding: const EdgeInsets.symmetric(horizontal: 18), tapTargetSize: MaterialTapTargetSize.shrinkWrap), onPressed: () => _host('admit', (w['pid'] as num).toInt()), child: const Text('Admit')),
                   ]),
                 ),
               const Divider(),
@@ -588,34 +623,95 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
     _e.loadInvitable();
     _sheet((c) {
       final list = _e.invitable;
+      final h = MediaQuery.sizeOf(c).height * 0.55;
       return SizedBox(
-        height: MediaQuery.sizeOf(c).height * 0.65,
-        child: ListView(padding: const EdgeInsets.fromLTRB(8, 0, 8, 20), children: [
-          const Padding(padding: EdgeInsets.fromLTRB(12, 0, 12, 6), child: Text('Add people to this call', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
-          const Padding(padding: EdgeInsets.fromLTRB(12, 0, 12, 8), child: Text('They get a ringing call. Online friends are listed first.', style: TextStyle(color: AppColors.muted, fontSize: 12.5))),
-          if (list == null) const Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator())),
-          if (list != null && list.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No friends or teammates to add yet.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted))),
-          for (final f in list ?? const <MJson>[])
-            ListTile(
-              leading: Stack(children: [
-                Avatar('${f['name']}', url: f['avatar_url'] as String?, radius: 20),
-                if (f['online'] == true) Positioned(right: 0, bottom: 0, child: Container(width: 11, height: 11, decoration: BoxDecoration(color: AppColors.success, shape: BoxShape.circle, border: Border.all(color: Theme.of(c).colorScheme.surface, width: 2)))),
-              ]),
-              title: Text('${f['name']}'),
-              subtitle: '${f['status'] ?? ''}'.isEmpty ? null : Text('${f['status']}', style: TextStyle(color: f['online'] == true ? AppColors.success : AppColors.muted, fontSize: 12)),
-              trailing: f['in_call'] == true
-                  ? const Text('In call', style: TextStyle(color: AppColors.muted))
-                  : f['ringing'] == true
-                      ? const Text('Calling…', style: TextStyle(color: AppColors.muted))
-                      : FilledButton(
-                          onPressed: () async {
-                            final msg = await _e.invite((f['id'] as num).toInt());
-                            if (mounted && msg != null) toast(context, msg);
-                          },
-                          child: const Text('Add'),
-                        ),
-            ),
-        ]),
+        height: h,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(c).bottom + 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Text('Add people to this call', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Colors.white)),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Text('They get a ringing call. Online friends are listed first.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ),
+              Expanded(
+                child: list == null
+                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                    : list.isEmpty
+                        ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No friends or teammates to add yet.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 15))))
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            itemCount: list.length,
+                            itemBuilder: (_, i) {
+                              final f = list[i];
+                              final rawId = f['id'] ?? f['user_id'];
+                              final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
+                              final name = '${f['name'] ?? f['username'] ?? f['email'] ?? 'User'}';
+                              final avatarUrl = f['avatar_url'] is String ? f['avatar_url'] as String : null;
+                              final status = '${f['status'] ?? ''}';
+                              final online = f['online'] == true;
+                              final inCall = f['in_call'] == true;
+                              final ringing = f['ringing'] == true;
+
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Stack(children: [
+                                  Avatar(name, url: avatarUrl, radius: 22),
+                                  if (online)
+                                    Positioned(
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.success,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: AppColors.surfaceDark, width: 2),
+                                        ),
+                                      ),
+                                    ),
+                                ]),
+                                title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                subtitle: status.isEmpty
+                                    ? null
+                                    : Text(
+                                        status,
+                                        style: TextStyle(
+                                          color: online ? AppColors.success : Colors.white60,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                trailing: inCall
+                                    ? const Text('In call', style: TextStyle(color: Colors.white54))
+                                    : ringing
+                                        ? const Text('Calling…', style: TextStyle(color: Colors.white54))
+                                        : FilledButton(
+                                            style: FilledButton.styleFrom(
+                                              minimumSize: const Size(72, 40),
+                                              padding: const EdgeInsets.symmetric(horizontal: 18),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            ),
+                                            onPressed: id == null
+                                                ? null
+                                                : () async {
+                                                    final msg = await _e.invite(id);
+                                                    if (mounted && msg != null) toast(context, msg);
+                                                  },
+                                            child: const Text('Add'),
+                                          ),
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
+        ),
       );
     });
   }
@@ -626,48 +722,59 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (c) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(c).viewInsets.bottom),
-        child: AnimatedBuilder(
-          animation: _e,
-          builder: (c2, _) => SizedBox(
-            height: MediaQuery.sizeOf(c2).height * 0.6,
-            child: Column(children: [
-              Expanded(
-                child: _e.chat.isEmpty
-                    ? const Center(child: Text('No messages yet. Messages here are only for this meeting.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)))
-                    : ListView.builder(
-                        controller: _chatScroll,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        itemCount: _e.chat.length,
-                        itemBuilder: (_, i) {
-                          final m = _e.chat[i];
-                          final mine = m['pid'] == _e.pid;
-                          return Align(
-                            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 3),
-                              padding: const EdgeInsets.fromLTRB(12, 7, 12, 6),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(c2).width * 0.78),
-                              decoration: BoxDecoration(color: mine ? AppColors.sentOf(c2) : AppColors.receivedOf(c2), borderRadius: BorderRadius.circular(14)),
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                                if (!mine) Text('${m['name']}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                                Text('${m['body']}', style: TextStyle(color: Theme.of(c2).colorScheme.onSurface)),
-                                Text('${m['time']}', style: TextStyle(fontSize: 10.5, color: AppColors.mutedOf(c2))),
-                              ]),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 8, 10),
-                child: Row(children: [
-                  Expanded(child: TextField(controller: _chatText, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'Message everyone', contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10)), onSubmitted: (_) => _sendChat())),
-                  IconButton.filled(icon: const Icon(Icons.send_rounded), onPressed: _sendChat),
-                ]),
-              ),
-            ]),
+      backgroundColor: AppColors.surfaceDark,
+      builder: (c) => Theme(
+        data: Theme.of(context).copyWith(
+          brightness: Brightness.dark,
+          colorScheme: ColorScheme.dark(
+            surface: AppColors.surfaceDark,
+            onSurface: Colors.white,
+            primary: AppColors.primary,
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(c).viewInsets.bottom),
+          child: AnimatedBuilder(
+            animation: _e,
+            builder: (c2, _) => SizedBox(
+              height: MediaQuery.sizeOf(c2).height * 0.6,
+              child: Column(children: [
+                Expanded(
+                  child: _e.chat.isEmpty
+                      ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No messages yet. Messages here are only for this meeting.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))))
+                      : ListView.builder(
+                          controller: _chatScroll,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          itemCount: _e.chat.length,
+                          itemBuilder: (_, i) {
+                            final m = _e.chat[i];
+                            final mine = m['pid'] == _e.pid;
+                            return Align(
+                              alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(vertical: 3),
+                                padding: const EdgeInsets.fromLTRB(12, 7, 12, 6),
+                                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(c2).width * 0.78),
+                                decoration: BoxDecoration(color: mine ? AppColors.primary : AppColors.elevatedDark, borderRadius: BorderRadius.circular(14)),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                                  if (!mine) Text('${m['name']}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primaryOnDark)),
+                                  Text('${m['body']}', style: const TextStyle(color: Colors.white)),
+                                  Text('${m['time']}', style: const TextStyle(fontSize: 10.5, color: Colors.white60)),
+                                ]),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 8, 10),
+                  child: Row(children: [
+                    Expanded(child: TextField(controller: _chatText, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'Message everyone', contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10)), onSubmitted: (_) => _sendChat())),
+                    IconButton.filled(icon: const Icon(Icons.send_rounded), onPressed: _sendChat),
+                  ]),
+                ),
+              ]),
+            ),
           ),
         ),
       ),

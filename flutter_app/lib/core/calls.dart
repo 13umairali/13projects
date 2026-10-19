@@ -186,14 +186,14 @@ class CallSession extends ChangeNotifier {
   /// Callee: accept, then answer the offer that arrives through the signals.
   Future<void> accept() async {
     _set('connecting');
+    if (!await _prepare()) return;
+    _loop();
     try {
       await AndroidCallKit.answerInApp(id);
       await api.post('calls/$id/answer');
     } catch (_) {
       return _finish('The call is no longer available');
     }
-    if (!await _prepare()) return;
-    _loop();
   }
 
   Future<void> decline() async {
@@ -219,13 +219,14 @@ class CallSession extends ChangeNotifier {
       if (e['call_id'] != id) return;
       if (e['type'] == 'call_cancel' && e['reason'] == 'answered') { _tones.accepted(); if (state == 'calling') _set('connecting'); }
       if (e['type'] == 'call_signal') {
+        _refreshSignals();
         if (_pc != null && e['signal'] is Map) {
           unawaited(_signal(Map<String, dynamic>.from(e['signal'] as Map)).catchError((_) {}));
-        } else { _refreshSignals(); }
+        }
       }
     });
     _sig?.cancel();
-    _sig = Timer.periodic(const Duration(seconds: 1), (_) => _pull());
+    _sig = Timer.periodic(const Duration(milliseconds: 350), (_) => _pull());
     _pull();
   }
 
@@ -553,6 +554,7 @@ class CallManager with WidgetsBindingObserver {
   /// the call's status with the server before joining.
   void incomingPush(Map<String, dynamic> data) {
     _callRevision++;
+    unawaited(CallAudio().prepare().catchError((_) {}));
     final id = int.tryParse('${data['call_id']}');
     final sent = int.tryParse('${data['sent_at']}');
     final ttl = int.tryParse('${data['ttl']}') ?? 45;

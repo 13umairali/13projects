@@ -168,11 +168,9 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
                     _row('Profile Name', '${p['profile_name'] ?? p['name']}'),
                     _row('Email', '${p['email'] ?? ''}', copy: true),
                     _row('Username', '${p['username'] ?? ''}'.isEmpty ? null : '${p['username']}'.replaceFirst(RegExp(r'^@+'), '')),
-                    _row('Member since', p['member_since'] as String?),
                     _row('Friends since', p['friend_since'] as String?),
                     _row('Role in your workspace', team?['role'] as String?),
                     _row('Last active', team?['last_active'] as String?),
-                    _row('Language', p['language'] as String?),
                   ]),
                 ),
                 if (history.isNotEmpty) ...[

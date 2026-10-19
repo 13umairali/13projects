@@ -426,8 +426,9 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
             _load();
           }),
       if (Platform.isAndroid) ...[
-        row(Icons.phone_in_talk_rounded, 'Calls on the lock screen', 'Lets an incoming call fill the screen like a normal phone call, also when the phone is locked.',
-            status: _lockCalls ? 'Allowed' : 'Off – calls show only as a small banner', ok: _lockCalls, actionLabel: _lockCalls ? null : 'Allow', action: _lockCalls ? null : () async { await DeviceEnv.openFullScreenIntentSettings(); }),
+        if (!_lockCalls)
+          row(Icons.phone_in_talk_rounded, 'Calls on the lock screen', 'Lets an incoming call fill the screen like a normal phone call, also when the phone is locked.',
+              status: 'Off – calls show only as a small banner', ok: false, actionLabel: 'Allow', action: () async { await DeviceEnv.openFullScreenIntentSettings(); }),
         row(Icons.picture_in_picture_alt_rounded, 'Calls over other apps', 'Shows incoming calls over other apps, and a small window with Mute and End during a call.',
             status: _overlay ? 'Allowed' : 'Off – asked when you minimise a call', ok: _overlay, actionLabel: _overlay ? null : 'Allow', action: _overlay ? null : () async { await NativeCalls.requestDraw(); }),
         row(Icons.battery_charging_full_rounded, 'Run in the background', 'Some phones stop apps to save battery, so calls arrive late. Set this app to "Unrestricted".',

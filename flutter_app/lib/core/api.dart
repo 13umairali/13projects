@@ -346,7 +346,18 @@ class Api {
     final keys = q.keys.toList()..sort();
     return '$path?${keys.map((k) => '${Uri.encodeQueryComponent(k)}=${Uri.encodeQueryComponent(q[k]!)}').join('&')}';
   }
-  static dynamic peek(String path, [Map<String, String>? q]) => _cache[_ck(path, q)] ?? _snapshots[_ck(path, q)];
+  static dynamic peek(String path, [Map<String, String>? q]) {
+    final k = _ck(path, q);
+    if (_cache.containsKey(k)) return _cache[k];
+    if (_snapshots.containsKey(k)) return _snapshots[k];
+    for (final entry in _cache.entries) {
+      if (entry.key.startsWith(path)) return entry.value;
+    }
+    for (final entry in _snapshots.entries) {
+      if (entry.key.startsWith(path)) return entry.value;
+    }
+    return null;
+  }
   /// Removes one saved response (e.g. to force a fresh download of an e-mail).
   static void forget(String path, [Map<String, String>? q]) {
     _cache.remove(_ck(path, q));
@@ -474,7 +485,7 @@ class Api {
     try {
       return await _sendOnce(method, path, query: query, body: body);
     } on ApiException catch (e) {
-      final transient = e.status == 0 || e.status == 500 || e.status == 502 || e.status == 503 || e.status == 504;
+      final transient = e.status == 0 || e.status == 500 || e.status == 502 || e.status == 503 || e.status == 504 || e.status == 522 || e.status == 520 || e.status == 523 || e.status == 524;
       if (method != 'GET' || !transient) rethrow;
       await Future.delayed(const Duration(milliseconds: 700));
       return _sendOnce(method, path, query: query, body: body);
@@ -590,6 +601,9 @@ class PublicApi {
       if (b['message'] != null) return '${b['message']}';
     }
     if (r.status == 404) return 'The server does not have the app API installed (404).';
+    if (r.status == 522 || r.status == 520 || r.status == 523 || r.status == 524) {
+      return 'Backend server connection timed out (Error ${r.status}). Please check your server status or try again.';
+    }
     return fallback;
   }
 }

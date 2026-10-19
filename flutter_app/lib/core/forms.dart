@@ -16,6 +16,7 @@ class F {
   final String? hint;
   final String? help;
   final bool required;
+  final bool readOnly;
   final List<(String, String)> options; // (value, label)
   final double min;
   final double max;
@@ -25,7 +26,7 @@ class F {
   final bool Function(Map<String, dynamic>)? visible;
   final bool sendEmpty; // send "" instead of null when blank
   const F(this.key, this.label,
-      {this.type = FT.text, this.hint, this.help, this.required = false, this.options = const [], this.min = 0, this.max = 100, this.divisions, this.asInt = true, this.initial, this.visible, this.sendEmpty = false});
+      {this.type = FT.text, this.hint, this.help, this.required = false, this.readOnly = false, this.options = const [], this.min = 0, this.max = 100, this.divisions, this.asInt = true, this.initial, this.visible, this.sendEmpty = false});
 
   const F.section(String title)
       : key = '',
@@ -34,6 +35,7 @@ class F {
         hint = null,
         help = null,
         required = false,
+        readOnly = false,
         options = const [],
         min = 0,
         max = 0,
@@ -195,6 +197,8 @@ class FormBodyState extends State<FormBody> {
           padding: const EdgeInsets.only(bottom: 14),
           child: TextField(
             controller: _c[f.key],
+            readOnly: f.readOnly,
+            enabled: !f.readOnly,
             obscureText: pw && _hide,
             minLines: f.type == FT.multiline ? 4 : 1,
             maxLines: f.type == FT.multiline ? 12 : 1,

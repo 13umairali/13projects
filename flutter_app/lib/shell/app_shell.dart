@@ -3,6 +3,7 @@ import '../core/conversation_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api.dart';
 import '../core/background_sync.dart';
 import '../core/mail_sync.dart';
@@ -30,6 +31,7 @@ import '../screens/contacts_screens.dart';
 import '../screens/inbox_screens.dart';
 import '../screens/misc_screens.dart';
 import '../screens/people_screens.dart';
+import '../screens/call_history_screen.dart';
 
 /// App frame:
 ///  • Header : ☰ menu · title · search · notifications · profile
@@ -89,6 +91,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
       CallKitBridge.init();
       if (NotifyService.I.pendingCallAction == null && NotifyService.I.pendingNotification != null) _openNotifications();
       _pollUnread();
+      _pollMissedCalls();
       MailSync.sync(context.read<Session>());
       _mailTimer = Timer.periodic(const Duration(seconds: 10), (_) {
         if (!mounted || WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) return;
@@ -157,6 +160,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
     DeviceContactsSync.I.detach();
     ConversationHeader.states.removeListener(_selectionChanged);
     super.dispose();
+  }
+
+  int _missedCalls = 0;
+
+  Future<void> _pollMissedCalls() async {
+    try {
+      final list = Api.list(await Api.of(context).getNoCache('calls/history'));
+      final prefs = await SharedPreferences.getInstance();
+      final viewed = prefs.getStringList('viewed_calls') ?? <String>[];
+      final unreadMissed = list.where((c) => c['outcome'] != 'answered' && c['outgoing'] != true && !viewed.contains('${c['id']}')).length;
+      if (mounted && unreadMissed != _missedCalls) {
+        setState(() => _missedCalls = unreadMissed);
+      }
+    } catch (_) {}
   }
 
   Future<void> _pollUnread() async {
@@ -418,6 +435,30 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
       title: Text(_headerTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: _isDetail || _headerTitle != Brand.name ? null : const TextStyle(fontFamily: 'Inter', fontSize: 22, fontWeight: FontWeight.w600)),
       actions: [
         IconButton(tooltip: 'Search', icon: const Icon(Icons.search_rounded), onPressed: () => showSearch(context: context, delegate: AppSearchDelegate())),
+        IconButton(
+          tooltip: _missedCalls > 0 ? 'Call history, $_missedCalls missed' : 'Call history',
+          onPressed: () async {
+            setState(() => _missedCalls = 0);
+            try {
+              final list = Api.list(await Api.of(context).getNoCache('calls/history'));
+              final prefs = await SharedPreferences.getInstance();
+              final viewed = prefs.getStringList('viewed_calls') ?? <String>[];
+              for (final c in list) {
+                if (c['id'] != null && !viewed.contains('${c['id']}')) {
+                  viewed.add('${c['id']}');
+                }
+              }
+              await prefs.setStringList('viewed_calls', viewed);
+            } catch (_) {}
+            await pushPage(context, const CallHistoryPage());
+            _pollMissedCalls();
+          },
+          icon: Badge(
+            isLabelVisible: _missedCalls > 0,
+            label: Text('$_missedCalls'),
+            child: const Icon(Icons.phone_in_talk_rounded),
+          ),
+        ),
         IconButton(
           tooltip: _unread > 0 ? 'Notifications, $_unread unread' : 'Notifications',
           icon: Badge(isLabelVisible: _unread > 0, label: Text(_unread > 99 ? '99+' : '$_unread'), child: const Icon(Icons.notifications_none_rounded)),

@@ -30,11 +30,18 @@ class BrandLogo extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
         label: '${Brand.name} logo',
         image: true,
-        child: Image.asset(Brand.logoAsset,
-            width: size,
-            height: size * .75,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Image.asset(Brand.logoAsset,
+              width: size,
+              height: size * .75,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high),
+        ),
       );
 }
 

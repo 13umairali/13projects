@@ -3,18 +3,21 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="8dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="12dp"
     android:background="@drawable/friend_widget_background">
+
+    <!-- Left side: User profile picture / avatar (Enlarged to 60x60, taking ~65% of widget height) -->
     <FrameLayout
-        android:layout_width="76dp"
-        android:layout_height="76dp">
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:background="#F0F2F5">
         <ImageView
             android:id="@+id/widget_photo"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="fitCenter"
+            android:scaleType="centerCrop"
             android:visibility="gone"
             android:importantForAccessibility="no" />
         <TextView
@@ -22,39 +25,47 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:background="@drawable/friend_widget_avatar"
             android:text="+"
-            android:textColor="#687386"
-            android:textSize="34sp"
+            android:textColor="#2563EB"
+            android:textSize="24sp"
             android:textStyle="bold"
             android:importantForAccessibility="no" />
     </FrameLayout>
-    <TextView
-        android:id="@+id/widget_name"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="4dp"
-        android:gravity="center"
-        android:maxLines="3"
-        android:ellipsize="end"
-        android:includeFontPadding="false"
-        android:autoSizeTextType="uniform"
-        android:autoSizeMinTextSize="12sp"
-        android:autoSizeMaxTextSize="16sp"
-        android:autoSizeStepGranularity="1sp"
-        android:text="@string/friend_widget_choose"
-        android:textColor="#18212F"
-        android:textSize="16sp"
-        android:textStyle="bold" />
-    <TextView
-        android:id="@+id/widget_hint"
-        android:layout_width="match_parent"
+
+    <!-- RemoteViews-safe spacer view -->
+    <View
+        android:layout_width="14dp"
+        android:layout_height="1dp" />
+
+    <!-- Right side: User full name & status hint -->
+    <LinearLayout
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:text="@string/friend_widget_setup"
-        android:textColor="#687386"
-        android:textSize="11sp" />
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:text="@string/friend_widget_choose"
+            android:textColor="#18212F"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/widget_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:gravity="start|center_vertical"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="@string/friend_widget_setup"
+            android:textColor="#687386"
+            android:textSize="12sp" />
+    </LinearLayout>
 </LinearLayout>

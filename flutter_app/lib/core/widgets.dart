@@ -291,9 +291,10 @@ class Avatar extends StatelessWidget {
     final fallback = label.isEmpty || label.toLowerCase() == 'unknown' || label == 'null'
         ? Icon(Icons.person_rounded, color: Colors.white, size: radius)
         : Text(label.characters.first.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700).copyWith(fontSize: radius * 0.95));
+    final cleanUrl = (url != null && url!.trim().isNotEmpty && (url!.startsWith('http://') || url!.startsWith('https://'))) ? url!.trim() : null;
     return CircleAvatar(radius: radius, backgroundColor: c,
-      foregroundImage: url != null && url!.trim().isNotEmpty ? NetworkImage(url!) : null,
-      onForegroundImageError: url != null && url!.trim().isNotEmpty ? (_, __) {} : null,
+      foregroundImage: cleanUrl != null ? NetworkImage(cleanUrl) : null,
+      onForegroundImageError: cleanUrl != null ? (_, __) {} : null,
       child: fallback);
 
   }
@@ -436,6 +437,8 @@ class _SkeletonListState extends State<SkeletonList> with SingleTickerProviderSt
 }
 
 /// Loads once (and on reload) and renders [builder]. Shows spinner / error with retry.
+final Map<String, dynamic> _asyncViewCache = {};
+
 class AsyncView<T> extends StatefulWidget {
   final Future<T> Function(Api api) load;
   final Widget Function(BuildContext context, T data, Future<void> Function() reload) builder;
@@ -454,12 +457,18 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
   bool _loading = true;
   bool _showSkeleton = false; // the skeleton appears only if loading takes longer than a blink (no flash when data is saved)
   Timer? _skeletonTimer;
+  late final String _cacheKey;
 
   @override
   void initState() {
     super.initState();
-    _skeletonTimer = Timer(const Duration(milliseconds: 220), () {
-      if (mounted && _loading) setState(() => _showSkeleton = true);
+    _cacheKey = widget.load.toString();
+    if (_asyncViewCache.containsKey(_cacheKey)) {
+      _data = _asyncViewCache[_cacheKey] as T;
+      _loading = false;
+    }
+    _skeletonTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && _loading && _data == null) setState(() => _showSkeleton = true);
     });
     AppRefresh.tick.addListener(_onTick);
     _paintFromCache();
@@ -476,34 +485,40 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
   /// Quiet refresh: only when this screen is the visible one; keeps showing the current data meanwhile.
   void _onTick() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_loading && TickerMode.valuesOf(context).enabled) _load();
+      if (mounted && TickerMode.valuesOf(context).enabled) _load();
     });
   }
 
   /// Show the previous result immediately (no spinner), then refresh quietly.
   Future<void> _paintFromCache() async {
+    if (_data != null) return;
     try {
       final d = await widget.load(Api(context.read<Session>(), cacheOnly: true));
-      if (mounted && _data == null) setState(() { _data = d; _loading = false; });
+      if (mounted && _data == null) {
+        _asyncViewCache[_cacheKey] = d;
+        setState(() { _data = d; _loading = false; });
+      }
     } catch (_) {}
   }
 
   Future<void> _load() async {
     if (!mounted) return;
-    setState(() {
-      _loading = _data == null;
-      _error = null;
-    });
     try {
       final d = await widget.load(Api.of(context));
-      if (mounted) setState(() { _data = d; _loading = false; });
+      if (mounted) {
+        _asyncViewCache[_cacheKey] = d;
+        setState(() { _data = d; _loading = false; });
+      }
     } on ApiException catch (e) {
-      if (mounted) setState(() { _error = e.message; _loading = false; });
+      if (mounted && _data == null) setState(() { _error = e.message; _loading = false; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_data != null) {
+      return widget.builder(context, _data as T, _load);
+    }
     if (widget.quiet && (_loading || _data == null)) return const SizedBox.shrink();
     if (_loading) return _showSkeleton ? (widget.placeholder ?? const SkeletonList()) : const SizedBox.shrink();
     if (_data == null) return EmptyState(icon: Icons.cloud_off_rounded, text: _error ?? 'Something went wrong', action: 'Retry', onAction: _load);

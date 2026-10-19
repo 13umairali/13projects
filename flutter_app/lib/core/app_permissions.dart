@@ -68,25 +68,12 @@ class AppPermissions {
   static Future<bool> microphone({BuildContext? context}) => ask(Permission.microphone, key: 'mic', icon: Icons.mic_rounded, title: 'Allow the microphone', why: 'Needed so the other person can hear you in calls and voice messages. It is only used while a call or recording is running.', context: context);
   static Future<bool> camera({BuildContext? context}) => ask(Permission.camera, key: 'cam', icon: Icons.videocam_rounded, title: 'Allow the camera', why: 'Needed for video calls and to take photos. It is only used when you switch the camera on or take a picture.', context: context);
   /// Optional on Android 12+: flutter_webrtc needs this runtime grant to inspect/use Bluetooth call devices.
-  /// A denial must not block the call; Android can still use the built-in speaker/earpiece.
+  /// Automatically requests permission without popping up a manual dialog upon connection.
   static Future<void> bluetoothForCalls({BuildContext? context}) async {
     if (!Platform.isAndroid) return;
     try {
       final status = await Permission.bluetoothConnect.status;
       if (!status.isDenied) return; // already granted, restricted, or deliberately blocked
-      const key = 'bluetooth_call';
-      if (!await _seen(key)) {
-        await _mark(key);
-        final proceed = await explain(
-          context,
-          icon: Icons.bluetooth_audio_rounded,
-          title: 'Use Bluetooth audio in calls',
-          why: 'Allow nearby-device access to route call audio to a Bluetooth headset. If you decline, calls can still use your phone speaker or earpiece.',
-          yes: 'Continue',
-          no: 'Use phone audio',
-        );
-        if (!proceed) return;
-      }
       await Permission.bluetoothConnect.request();
     } catch (_) {
       // Headset routing is optional; never prevent a call from using its built-in audio devices.
@@ -184,6 +171,8 @@ class AppPermissions {
   /// Offered once, after the first call. Many phones (Xiaomi, Oppo, Vivo, Huawei, Samsung…) stop apps in the background and then
   /// calls / messages arrive late. This opens the phone's own battery page; the person chooses "Unrestricted" for this app.
   static Future<void> offerBatteryHelp() async {
+    // Disabled for now. To re-enable automatic battery help popup later, remove the return below:
+    return;
     if (!Platform.isAndroid || _deferSetup || await _seen('battery')) return;
     await _mark('battery');
     final yes = await explain(null, icon: Icons.battery_charging_full_rounded, title: 'Get calls on time', why: 'Some phones stop apps in the background to save battery, which delays calls and messages. Open the battery page and set this app to "Unrestricted" (or turn off battery optimisation). On Xiaomi / Oppo / Vivo also allow "Autostart".', yes: 'Open battery page', no: 'Later');
