@@ -182,6 +182,8 @@ class RoomHost extends ChangeNotifier with WidgetsBindingObserver {
 
   void minimize() {
     minimized = true;
+    // Just-in-time: first minimise of a call is when "Display over other apps" is useful, so ask (once) now.
+    if (Platform.isAndroid && engine?.phase == 'in') AppPermissions.floatingWindow().catchError((_) => false);
     _syncPresentation();
     _poke();
   }

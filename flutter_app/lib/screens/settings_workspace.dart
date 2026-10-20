@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../core/api.dart';
+import '../core/people_card.dart';
 import '../core/forms.dart';
 import '../core/paged.dart';
 import '../core/session.dart';
@@ -357,11 +358,11 @@ class _TeamPageState extends State<TeamPage> {
               child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
                 SectionHeader('Members (${members.length})'),
                 for (final m in members)
-                  ListRow(
-                    leading: Avatar('${m['name']}', url: m['avatar_url'] as String?),
-                    title: '${m['name']}${m['is_me'] == true ? ' (you)' : ''}',
+                  PeopleCard(
+                    avatar: Avatar('${m['name']}', url: m['avatar_url'] as String?, radius: 24),
+                    name: '${m['name']}${m['is_me'] == true ? ' (you)' : ''}',
                     subtitle: '${m['email']}',
-                    badge: '${m['role']}',
+                    badges: [PeopleCardBadge('${m['role']}'.isEmpty ? 'Member' : '${m['role']}'[0].toUpperCase() + '${m['role']}'.substring(1))],
                     onTap: (m['is_me'] == true || m['role'] == 'owner' || (me != 'owner')) ? null : () => actionSheet(c, '${m['name']}', [
                           for (final r in ['admin', 'agent', 'viewer'].where((r) => r != m['role'])) SheetAction('Make $r', Icons.swap_horiz_rounded, () async {
                             await run(c, (a) => a.put('team/members/${m['id']}/role', {'role': r}), ok: 'Role updated');

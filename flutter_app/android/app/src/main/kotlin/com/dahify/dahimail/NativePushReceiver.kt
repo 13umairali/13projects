@@ -391,7 +391,13 @@ open class NativePushReceiver : FlutterFirebaseMessagingReceiver() {
             val key = data["notification_id"].takeUnless { it.isNullOrBlank() }
                 ?: data["message_id"].takeUnless { it.isNullOrBlank() } ?: data["google.message_id"] ?: return false
             val receipts = context.getSharedPreferences("native_push", Context.MODE_PRIVATE)
-            val receiptKey = "alert_delivered_$key"
+            // A reply can reuse its thread's notification/message id. For e-mail include the newest content and
+            // time, so the reply is posted (replacing the old alert in place) instead of dropped as a duplicate.
+            val version = if (type == "email_received" || type == "new_email") {
+                val time = listOf("created_at_iso", "created_at", "sent_at").firstNotNullOfOrNull { data[it]?.trim()?.takeIf(String::isNotEmpty) }.orEmpty()
+                ":v" + Integer.toHexString("${data["body"].orEmpty()}|$time".hashCode())
+            } else ""
+            val receiptKey = "alert_delivered_$key$version"
             val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
             if (receipts.getLong(receiptKey, 0) > cutoff) return true
             val id = key.hashCode() and 0x7fffffff
@@ -413,7 +419,7 @@ open class NativePushReceiver : FlutterFirebaseMessagingReceiver() {
                 .setColor(Color.rgb(0, 119, 163))
                 .setContentTitle(sender).setContentText(body)
                 .setPriority(NotificationCompat.PRIORITY_HIGH).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-                .setAutoCancel(true).setContentIntent(view).setOnlyAlertOnce(true)
+                .setAutoCancel(true).setContentIntent(view).setOnlyAlertOnce(version.isEmpty())
                 .setDefaults(NotificationCompat.DEFAULT_LIGHTS or (if (vibrate) NotificationCompat.DEFAULT_VIBRATE else 0) or
                     (if (sound == "default") NotificationCompat.DEFAULT_SOUND else 0))
                 .setCategory(if (replyTarget.isNotEmpty()) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_EVENT)
@@ -544,12 +550,11 @@ open class NativePushReceiver : FlutterFirebaseMessagingReceiver() {
         internal fun avatarPlaceholder(name: String): Bitmap {
             val bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = avatarColor(name) }
+            // "To: John Doe" is drawn as "JD": the To:/From: prefix is not part of the person's name.
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = avatarColor(NativeNotificationCard.cleanName(name)) }
             canvas.drawCircle(64f, 64f, 64f, paint)
-            val label = name.trim().ifBlank { "D" }
-            val boundary = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(label) }
-            val initials = label.substring(0, boundary.next()).uppercase(Locale.ROOT)
-            paint.color = Color.WHITE; paint.textSize = 60.8f; paint.textAlign = Paint.Align.CENTER; paint.typeface = Typeface.DEFAULT_BOLD
+            val initials = NativeNotificationCard.initials(name)
+            paint.color = Color.WHITE; paint.textSize = if (initials.length > 1) 50f else 60.8f; paint.textAlign = Paint.Align.CENTER; paint.typeface = Typeface.DEFAULT_BOLD
             canvas.drawText(initials, 64f, 64f - (paint.ascent() + paint.descent()) / 2, paint)
             return bitmap
         }

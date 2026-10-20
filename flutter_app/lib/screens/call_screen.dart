@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/brand.dart';
 import '../core/call_audio.dart';
 import '../core/incoming_call_view.dart';
+import '../core/wa_call_view.dart';
 import '../core/calls.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
@@ -82,29 +83,17 @@ class _CallScreenState extends State<CallScreen> {
           call: IncomingCallPresentation(name: s.peerName, avatar: p['avatar_url'] as String?),
           onAccept: () { CallManager.I.ringStop(); s.accept(); },
           onDecline: () { CallManager.I.ringStop(); s.decline(); },
-        ) : Container(
-          width: double.infinity,
-          decoration: const BoxDecoration(gradient: Brand.gradient),
-          child: SafeArea(
-            child: Column(children: [
-              const Spacer(flex: 2),
-              Avatar(s.peerName, url: p['avatar_url'] as String?, radius: 56),
-              const SizedBox(height: 22),
-              Text(s.peerName, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              Text(_status, style: const TextStyle(color: Colors.white70, fontSize: 16)),
-              const Spacer(flex: 3),
-              if (!over)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                          _round(s.muted ? Icons.mic_off_rounded : Icons.mic_rounded, s.muted ? 'Unmute' : 'Mute', Colors.white24, s.toggleMute, on: s.muted),
-                          _round(Icons.call_end_rounded, 'End', AppColors.danger, s.hangUp),
-                          _round(s.audio.icon, 'Audio', Colors.white24, () => showCallAudioPicker(context, s.audio, s.selectAudioOutput), on: s.speaker),
-                        ]),
-                ),
-            ]),
-          ),
+        ) : WaCallView(
+          name: s.peerName,
+          avatarUrl: p['avatar_url'] as String?,
+          status: _status,
+          connected: s.state == 'connected',
+          onBack: () { CallManager.I.minimizeLegacy(); Navigator.of(context).pop(); },
+          buttons: over ? const [] : [
+            WaCallButton(icon: s.audio.icon, tooltip: 'Audio output', active: s.speaker, onTap: () => showCallAudioPicker(context, s.audio, s.selectAudioOutput)),
+            WaCallButton(icon: s.muted ? Icons.mic_off_rounded : Icons.mic_rounded, tooltip: s.muted ? 'Unmute' : 'Mute', active: s.muted, onTap: s.toggleMute),
+            WaCallButton(icon: Icons.call_end_rounded, tooltip: 'End call', danger: true, onTap: s.hangUp),
+          ],
         ),
       ),
     );

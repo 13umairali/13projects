@@ -142,15 +142,8 @@ class AppPermissions {
         return;
       }
     }
-    if (await NativeCalls.canDraw() || await _seen('incoming_overlay')) return;
-    if (!context.mounted || _deferSetup) {
-      return;
-    }
-    await _mark('incoming_overlay');
-    final yes = await explain(context, icon: Icons.phone_in_talk_rounded, title: 'Show calls over other apps', why: 'Allow "Display over other apps" to see the incoming call screen while using another app. Without it, Android may show only a call notification.', yes: 'Open setting');
-    // Share the decision with the in-call floating-window explanation.
-    await _mark('overlay');
-    if (yes && !_deferSetup) await NativeCalls.requestDraw();
+    // "Display over other apps" is a special permission: it is NOT requested at sign-in. It is asked once, in context, the first
+    // time the person minimises a call (see floatingWindow) and can be changed any time in Settings → Permissions.
   }
 
   // ───────────── floating call window ─────────────

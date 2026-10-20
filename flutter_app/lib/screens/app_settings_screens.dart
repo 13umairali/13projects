@@ -1,3 +1,4 @@
+import '../core/cached_image.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -510,6 +511,8 @@ class _StoragePageState extends State<StoragePage> {
     if (!await confirmDialog(context, 'Clear saved data?', 'Saved lists, emails and pictures are removed from this phone. Everything is downloaded again when you open it. Your account and emails on the server are not affected.', action: 'Clear', danger: true)) return;
     setState(() => _busy = true);
     await Api.clearSaved();
+    await DiskCachedImage.clearAll();
+    PaintingBinding.instance.imageCache.clear();
     try {
       await WebViewController().clearCache(); // pictures kept by the email viewer
     } catch (_) {}

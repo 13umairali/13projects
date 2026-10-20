@@ -1,18 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Only RemoteViews-safe classes here (LinearLayout / FrameLayout / TextView / ImageView).
+     A plain <View> is NOT allowed in a widget and makes the launcher show "Can't load widget". -->
+<!-- The outer frame fills whatever cell size the launcher gives (and takes the tap); the card inside only wraps its content,
+     so there is no empty band above / below the picture and name, whatever the widget height is. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="top">
+
+    <!-- The card hugs the TOP of the widget box; the free space is left below it. Launchers draw a 2x1 widget box lower than the
+         app icons next to it (their labels take the space below the icon), so top-aligning lines the card up with the icons. -->
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:padding="12dp"
+    android:paddingStart="4dp"
+    android:paddingEnd="6dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
     android:background="@drawable/friend_widget_background">
 
-    <!-- Left side: User profile picture / avatar (Enlarged to 60x60, taking ~65% of widget height) -->
     <FrameLayout
-        android:layout_width="60dp"
-        android:layout_height="60dp"
-        android:background="#F0F2F5">
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:background="@drawable/friend_widget_avatar">
         <ImageView
             android:id="@+id/widget_photo"
             android:layout_width="match_parent"
@@ -26,22 +40,17 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="+"
-            android:textColor="#2563EB"
-            android:textSize="24sp"
+            android:textColor="@color/fw_accent"
+            android:textSize="22sp"
             android:textStyle="bold"
             android:importantForAccessibility="no" />
     </FrameLayout>
 
-    <!-- RemoteViews-safe spacer view -->
-    <View
-        android:layout_width="14dp"
-        android:layout_height="1dp" />
-
-    <!-- Right side: User full name & status hint -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:layout_marginStart="8dp"
         android:orientation="vertical"
         android:gravity="center_vertical">
         <TextView
@@ -49,23 +58,31 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="start|center_vertical"
-            android:maxLines="2"
+            android:maxLines="3"
             android:ellipsize="end"
+            android:breakStrategy="simple"
+            android:hyphenationFrequency="none"
             android:includeFontPadding="false"
             android:text="@string/friend_widget_choose"
-            android:textColor="#18212F"
+            android:textColor="@color/fw_title"
             android:textSize="15sp"
             android:textStyle="bold" />
         <TextView
             android:id="@+id/widget_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
+            android:layout_marginTop="2dp"
             android:gravity="start|center_vertical"
             android:maxLines="1"
             android:ellipsize="end"
             android:text="@string/friend_widget_setup"
-            android:textColor="#687386"
+            android:textColor="@color/fw_subtitle"
             android:textSize="12sp" />
     </LinearLayout>
+</LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 </LinearLayout>

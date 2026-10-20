@@ -78,14 +78,17 @@ internal object DeviceSounds {
     }
 
     /** Use the call route without taking audio focus away from WebRTC. */
-    @Synchronized fun playCallTone(context: Context, connected: Boolean) {
+    fun playCallTone(context: Context, connected: Boolean) = playCallTone(context, if (connected) "connected" else "dialing")
+
+    /** asset: "dialing" (callee offline / not connected), "ringback" (callee's device is ringing) or "connected". */
+    @Synchronized fun playCallTone(context: Context, asset: String) {
+        val connected = asset == "connected"
         stopCallTone()
         val player = MediaPlayer()
         try {
             player.setAudioAttributes(AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-            val asset = if (connected) "connected" else "dialing"
             val key = FlutterInjector.instance().flutterLoader()
                 .getLookupKeyForAsset("assets/sounds/$asset.wav")
             // WAV assets may be compressed by the APK packager, so use a

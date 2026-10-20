@@ -879,8 +879,8 @@ class _FriendChatPageState extends State<FriendChatPage> with ConversationVisibi
             ]),
           ),
           actions: [
-            if (_calls) IconButton(tooltip: 'Video call', icon: const Icon(Icons.videocam_rounded), onPressed: () => CallManager.I.startVideoCall(context, _id, _name)),
-            if (_calls) IconButton(tooltip: 'Audio call', icon: const Icon(Icons.call_rounded), onPressed: () => CallManager.I.startCall(context, _id)),
+            if (_calls) IconButton(tooltip: 'Video call', icon: const Icon(Icons.videocam_rounded), onPressed: () => CallManager.I.startVideoCall(context, _id, _name, avatar: widget.friend['avatar_url'] as String?)),
+            if (_calls) IconButton(tooltip: 'Audio call', icon: const Icon(Icons.call_rounded), onPressed: () => CallManager.I.startCall(context, _id, name: _name, avatar: widget.friend['avatar_url'] as String?)),
             PopupMenuButton<String>(
               onSelected: (v) {
                 if (v == 'profile') _openProfile();
@@ -897,7 +897,9 @@ class _FriendChatPageState extends State<FriendChatPage> with ConversationVisibi
           child: Column(children: [
             if (_loadError != null) MaterialBanner(content: Text(_loadError!), actions: [TextButton(onPressed: _load, child: const Text('Retry'))]),
             Expanded(
-              child: _msgs.isEmpty && _first && _loadError == null
+              child: !_cacheReady
+                  ? const SizedBox.shrink() // saved messages are being read from the phone (milliseconds): no spinner flash
+                  : _msgs.isEmpty && _first && _loadError == null
                   ? const Center(child: CircularProgressIndicator())
                   : _msgs.isEmpty
                   ? EmptyState(icon: Icons.chat_bubble_outline_rounded, text: _readOnly ? 'No messages in this conversation.' : 'No messages yet.\nSay hello 👋')

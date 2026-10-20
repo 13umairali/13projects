@@ -98,7 +98,8 @@ class DeviceContactsSync extends ChangeNotifier {
     contacts = []; matches = []; allowed = false;
   }
 
-  Future<void> enable() async {
+  /// [force]: false when a screen merely opens – saved contacts are already shown, so only refresh if the data is stale.
+  Future<void> enable({bool force = true}) async {
     final scope = _scope;
     if (scope == null) return;
     // Native permission sheet, without an extra full-screen app gate.
@@ -110,7 +111,7 @@ class DeviceContactsSync extends ChangeNotifier {
       await (await SharedPreferences.getInstance()).setBool('device_contacts_paused_$scope', false);
     }
     notifyListeners();
-    if (allowed) await sync(force: true);
+    if (allowed) await sync(force: force);
   }
 
   Future<void> pause() async {

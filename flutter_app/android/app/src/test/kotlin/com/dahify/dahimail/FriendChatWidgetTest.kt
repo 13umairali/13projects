@@ -92,6 +92,35 @@ class FriendChatWidgetTest {
         assertEquals("Choose a friend", label(id))
     }
 
+    private fun pending(owner: Int, savedAt: Long, ttl: Long = 120_000L) = JSONObject().put("owner_id", owner).put("friend_id", 11)
+        .put("name", "William").put("saved_at", savedAt).put("ttl", ttl).toString()
+
+    @Test fun `a new widget gets the friend chosen on the profile even if the pin callback never arrives`() {
+        FriendChatWidget.account(context, 7)
+        val prefs = context.getSharedPreferences("friend_widgets", Context.MODE_PRIVATE)
+        prefs.edit().putString("pending_x", pending(7, System.currentTimeMillis())).commit()
+        val id = add() // the launcher's first update of the new widget
+        assertEquals("William", label(id))
+        assertFalse(prefs.contains("pending_x"))
+        assertEquals(11, FriendChatWidget.action(context, id)?.get("from_id"))
+        // used once: the next new widget starts empty
+        assertEquals("Choose a friend", label(add()))
+    }
+
+    @Test fun `stale or foreign pending selections are never given to a new widget`() {
+        FriendChatWidget.account(context, 7)
+        val prefs = context.getSharedPreferences("friend_widgets", Context.MODE_PRIVATE)
+        prefs.edit().putString("pending_old", pending(7, System.currentTimeMillis() - 700_000L, 600_000L))
+            .putString("pending_other", pending(8, System.currentTimeMillis())).commit()
+        assertEquals("Choose a friend", label(add()))
+    }
+
+    @Test fun `a launcher that cannot pin still remembers the friend for the next added widget`() {
+        FriendChatWidget.pin(context, 7, 11, "William") // Robolectric launcher: pinning not supported -> false
+        val id = add()
+        assertEquals("William", label(id))
+    }
+
     @Test fun `photo replaces the initial and the larger tile preserves the full name`() {
         val id = add()
         val image = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)

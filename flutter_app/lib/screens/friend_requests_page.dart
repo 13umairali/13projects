@@ -40,7 +40,7 @@ class _FriendRequestsPageState extends State<FriendRequestsPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
           body: AsyncView<Map<String, dynamic>>(
-        load: (api) async => Api.obj(await api.getNoCache('friends')),
+        load: (api) async => Api.obj(await api.get('friends')),
         builder: (context, data, reload) {
           final requests =
               Api.list(data[widget.sent ? 'outgoing' : 'incoming']);
@@ -61,14 +61,15 @@ class _FriendRequestsPageState extends State<FriendRequestsPage> {
                               : 'No friend requests.'),
                     for (final person in requests)
                       PeopleListRow(
-                        avatar: PeopleAvatar(name: '${person['name'] ?? ''}', url: person['avatar_url'] as String?),
+                        avatar: PeopleAvatar(name: '${person['name'] ?? ''}', url: person['avatar_url'] as String?, radius: 25),
+                        card: true,
                         name: '${person['name'] ?? ''}',
                         preview: widget.sent ? 'Request sent' : 'Wants to be your friend',
                         actions: [
                           if (!widget.sent) ...[
-                            FilledButton(onPressed: _busy.contains(person['request_id']) ? null : () => _act(person, 'accept', reload), child: const Text('Accept')),
-                            OutlinedButton(onPressed: _busy.contains(person['request_id']) ? null : () => _act(person, 'decline', reload), child: const Text('Reject')),
-                          ] else TextButton(onPressed: _busy.contains(person['request_id']) ? null : () => _act(person, 'cancel', reload), child: const Text('Cancel')),
+                            FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(0, 42), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: _busy.contains(person['request_id']) ? null : () => _act(person, 'accept', reload), child: const Text('Accept')),
+                            OutlinedButton(style: OutlinedButton.styleFrom(minimumSize: const Size(0, 42), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: _busy.contains(person['request_id']) ? null : () => _act(person, 'decline', reload), child: const Text('Reject')),
+                          ] else OutlinedButton(style: OutlinedButton.styleFrom(minimumSize: const Size(0, 42), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: _busy.contains(person['request_id']) ? null : () => _act(person, 'cancel', reload), child: const Text('Cancel')),
                         ],
                       ),
                   ]),

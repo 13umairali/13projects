@@ -13,6 +13,9 @@ import '../core/util.dart';
 
 /// Downloaded chat files live on the phone (like WhatsApp): the first tap downloads with a progress ring, after that they open at once.
 class ChatMediaStore {
+  /// Files already found on the phone this session, so a bubble that scrolls back into view paints at once
+  /// (no spinner, no disk check) instead of re-checking every time it is rebuilt.
+  static final Map<int, File> known = {};
   static String _safe(String n) => n.replaceAll(RegExp(r'[^\w.\- ]'), '_');
 
   static Future<File> _file(String account, int id, String name) async {
@@ -30,7 +33,8 @@ class ChatMediaStore {
     final account = _account(context);
     if (account == null) return null;
     final f = await _file(account, id, name);
-    return (await f.exists() && await f.length() > 0) ? f : null;
+    if (await f.exists() && await f.length() > 0) { known[id] = f; return f; }
+    return null;
   }
 
   /// a file you just sent is already on the phone: keep a copy so it shows at once
@@ -54,6 +58,7 @@ class ChatMediaStore {
       if (account == null) return;
       final f = await _file(account, id, name);
       await File(path).copy(f.path);
+      known[id] = f;
     } catch (_) {}
   }
 
@@ -82,6 +87,7 @@ class ChatMediaStore {
       if (total > 0 && got != total) throw Exception('Incomplete download');
       if (await target.exists()) await target.delete();
       await part.rename(target.path);
+      known[id] = target;
       return target;
     } finally {
       if (await part.exists()) await part.delete();
@@ -103,8 +109,9 @@ class ChatFileTile extends StatefulWidget {
 }
 
 class _ChatFileTileState extends State<ChatFileTile> {
-  File? _local;
-  bool _checked = false, _busy = false, _failed = false;
+  late File? _local = ChatMediaStore.known[widget.messageId];
+  late bool _checked = _local != null;
+  bool _busy = false, _failed = false;
   double _p = 0;
   VideoPlayerController? _v;
   bool _openingVideo = false;
@@ -116,7 +123,7 @@ class _ChatFileTileState extends State<ChatFileTile> {
   @override
   void initState() {
     super.initState();
-    _init();
+    if (_local == null) _init();
   }
 
   Future<void> _init() async {
@@ -164,7 +171,7 @@ class _ChatFileTileState extends State<ChatFileTile> {
   @override
   Widget build(BuildContext context) {
     final fg = widget.fg;
-    if (!_checked) return const SizedBox(width: 200, height: 64, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))));
+    if (!_checked) return SizedBox(width: _type == 'image' || _type == 'video' ? 220 : 200, height: _type == 'image' || _type == 'video' ? 160 : 64); // same size as the final tile: no jump, no spinner
     if (_type == 'image') return _image();
     if (_type == 'video') return _video();
     final icon = _type == 'pdf' ? Icons.picture_as_pdf_rounded : (_type == 'audio' ? Icons.audiotrack_rounded : Icons.insert_drive_file_rounded);
@@ -209,7 +216,7 @@ class _ChatFileTileState extends State<ChatFileTile> {
       )),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Stack(children: [ConstrainedBox(constraints: const BoxConstraints(maxWidth: 240, maxHeight: 300), child: Image.file(f, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_, __, ___) => const SizedBox(width: 200, height: 80, child: Center(child: Text('Photo could not be shown'))))), Positioned(right: 6, top: 6, child: Material(color: Colors.black54, shape: const CircleBorder(), child: InkWell(customBorder: const CircleBorder(), onTap: _save, child: const Padding(padding: EdgeInsets.all(6), child: Icon(Icons.download_rounded, color: Colors.white, size: 20)))))]),
+        child: Stack(children: [ConstrainedBox(constraints: const BoxConstraints(maxWidth: 240, maxHeight: 300), child: Image.file(f, fit: BoxFit.cover, cacheWidth: 720, gaplessPlayback: true, errorBuilder: (_, __, ___) => const SizedBox(width: 200, height: 80, child: Center(child: Text('Photo could not be shown'))))), Positioned(right: 6, top: 6, child: Material(color: Colors.black54, shape: const CircleBorder(), child: InkWell(customBorder: const CircleBorder(), onTap: _save, child: const Padding(padding: EdgeInsets.all(6), child: Icon(Icons.download_rounded, color: Colors.white, size: 20)))))]),
       ),
     );
   }

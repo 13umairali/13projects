@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fw_card">#B3FFFFFF</color>
+    <color name="fw_border">#66E4E7EC</color>
+    <color name="fw_title">#101828</color>
+    <color name="fw_subtitle">#667085</color>
+    <color name="fw_accent">#2563EB</color>
+    <color name="fw_accent_soft">#EAF1FF</color>
+</resources>

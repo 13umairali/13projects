@@ -39,7 +39,7 @@ class _AddFriendPageState extends State<AddFriendPage> {
 
   Future<void> _loadCounts() async {
     try {
-      final data = Api.obj(await Api.of(context).getNoCache('friends'));
+      final data = Api.obj(await Api.of(context).get('friends'));
       if (mounted) { setState(() {
         _incoming = Api.list(data['incoming']).length;
         _outgoing = Api.list(data['outgoing']).length;
@@ -155,11 +155,13 @@ class _AddFriendPageState extends State<AddFriendPage> {
           if (_hint.isNotEmpty) Padding(padding: const EdgeInsets.all(20), child: Text(_hint, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted))),
           Expanded(
             child: ListView.builder(
+              padding: const EdgeInsets.only(top: 4, bottom: 24),
               itemCount: _res.length,
               itemBuilder: (_, i) {
                 final p = _res[i];
                 return PeopleListRow(
-                  avatar: PeopleAvatar(name: '${p['name']}', url: p['avatar_url'] as String?,
+                  card: true,
+                  avatar: PeopleAvatar(name: '${p['name']}', url: p['avatar_url'] as String?, radius: 25,
                     onTap: () => pushPage(context, PersonProfilePage(userId: p['id'] as int))),
                   name: '${p['name']}',
                   preview: '${p['username'] ?? ''}'.replaceFirst(RegExp(r'^@+'), ''),

@@ -18,7 +18,9 @@ import java.util.UUID
 /** A launcher tile for one conversation. No token or message content leaves Flutter. */
 class FriendChatWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        ids.forEach { update(context, it) }
+        // A widget the app just asked the launcher to pin (or that the user adds right after tapping
+        // "Add chat widget") gets that friend even if the launcher's pin callback is late or never arrives.
+        ids.forEach { claimPending(context, it); update(context, it) }
     }
 
     override fun onDeleted(context: Context, ids: IntArray) {
@@ -37,8 +39,11 @@ class FriendChatWidget : AppWidgetProvider() {
         val target = runCatching { JSONObject(stored) }.getOrNull() ?: return
         if (target.optInt("owner_id") != prefs(context).getInt("account", 0)) return
         val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-        if (!owns(context, id)) return
-        save(context, id, target)
+        // Some launchers send this before the new id is listed by the widget manager, so ownership is not
+        // required here: the secret one-time token already proves the request came from this app.
+        if (id <= 0) return
+        prefs(context).edit().putString("widget_$id", target.toString()).commit()
+        runCatching { update(context, id) } // otherwise the first onUpdate draws it from the saved choice
     }
 
     companion object {
@@ -47,6 +52,29 @@ class FriendChatWidget : AppWidgetProvider() {
         private fun prefs(context: Context) = context.getSharedPreferences("friend_widgets", Context.MODE_PRIVATE)
         private fun manager(context: Context) = AppWidgetManager.getInstance(context)
         private fun component(context: Context) = ComponentName(context, FriendChatWidget::class.java)
+
+        private const val PIN_WAIT_MS = 120_000L      // launcher pin prompt
+        private const val MANUAL_WAIT_MS = 600_000L   // launcher cannot pin: user adds it from the widget list
+
+        /** Give the newest fresh pending friend of this account to [id], once, if the widget has no friend yet. */
+        private fun claimPending(context: Context, id: Int) {
+            val p = prefs(context)
+            if (read(context, id) != null) return
+            val account = p.getInt("account", 0)
+            val now = System.currentTimeMillis()
+            var bestKey: String? = null
+            var best: JSONObject? = null
+            for ((key, raw) in p.all) {
+                if (!key.startsWith("pending_")) continue
+                val v = runCatching { JSONObject(raw.toString()) }.getOrNull() ?: continue
+                val age = now - v.optLong("saved_at")
+                if (age < 0 || age > v.optLong("ttl", PIN_WAIT_MS) || v.optInt("owner_id") != account) continue
+                if (best == null || v.optLong("saved_at") > best.optLong("saved_at")) { best = v; bestKey = key }
+            }
+            val chosen = best ?: return
+            val chosenKey = bestKey ?: return
+            p.edit().remove(chosenKey).putString("widget_$id", chosen.toString()).commit()
+        }
 
         private fun owns(context: Context, id: Int) = id > 0 && manager(context).getAppWidgetIds(component(context)).contains(id)
 
@@ -87,7 +115,7 @@ class FriendChatWidget : AppWidgetProvider() {
         fun pin(context: Context, owner: Int, friend: Int, name: String, avatar: ByteArray? = null): Boolean {
             val values = target(owner, friend, name, avatar)
             val mgr = manager(context)
-            if (Build.VERSION.SDK_INT < 26 || !mgr.isRequestPinAppWidgetSupported) return false
+            val canPin = Build.VERSION.SDK_INT >= 26 && mgr.isRequestPinAppWidgetSupported
             account(context, owner)
             val token = UUID.randomUUID().toString()
             val p = prefs(context)
@@ -98,7 +126,10 @@ class FriendChatWidget : AppWidgetProvider() {
                 val savedAt = runCatching { JSONObject(raw.toString()).optLong("saved_at") }.getOrDefault(0L)
                 if (now - savedAt > 86_400_000L) edit.remove(key)
             }
-            edit.putString("pending_$token", values.put("saved_at", now).toString()).commit()
+            edit.putString("pending_$token", values.put("saved_at", now).put("ttl", if (canPin) PIN_WAIT_MS else MANUAL_WAIT_MS).toString()).commit()
+            // No pin support: the choice is still remembered, so the next widget added from the widget list
+            // opens as this friend instead of "Choose a friend".
+            if (!canPin) return false
             val callback = Intent(context, FriendChatWidget::class.java).setAction(PINNED)
                 .setData(Uri.parse("dahimail-widget://pin/$token"))
             // The launcher fills in EXTRA_APPWIDGET_ID; the explicit receiver is not exported.
@@ -108,7 +139,8 @@ class FriendChatWidget : AppWidgetProvider() {
                 putParcelable(AppWidgetManager.EXTRA_APPWIDGET_PREVIEW, views(context, values))
             }
             val requested = mgr.requestPinAppWidget(component(context), extras, sender)
-            if (!requested) p.edit().remove("pending_$token").apply()
+            // Launcher refused at runtime: keep the choice for a widget the user adds from the widget list.
+            if (!requested) p.edit().putString("pending_$token", values.put("ttl", MANUAL_WAIT_MS).toString()).apply()
             return requested
         }
 
@@ -147,15 +179,15 @@ class FriendChatWidget : AppWidgetProvider() {
                 }.getOrNull()
                 setViewVisibility(R.id.widget_photo, if (photo == null) View.GONE else View.VISIBLE)
                 setViewVisibility(R.id.widget_initial, if (photo == null) View.VISIBLE else View.GONE)
-                if (photo == null) setImageViewResource(R.id.widget_photo, 0)
-                else setImageViewBitmap(R.id.widget_photo, photo)
+                if (photo != null) setImageViewBitmap(R.id.widget_photo, photo)
                 setViewVisibility(R.id.widget_hint, if (name == null) View.VISIBLE else View.GONE)
                 setContentDescription(R.id.widget_root, if (name == null) context.getString(R.string.friend_widget_choose) else context.getString(R.string.friend_widget_chat_with, name))
             }
         }
 
         fun update(context: Context, id: Int) {
-            val remote = views(context, read(context, id))
+            // Never let bad saved data break the tile ("Can't load widget"): fall back to the empty "Choose a friend" tile.
+            val remote = runCatching { views(context, read(context, id)) }.getOrElse { views(context, null) }
             val launch = Intent(context, MainActivity::class.java)
                 // A private extra avoids Flutter treating this as a named-route deep link.
                 .setAction("com.dahify.dahimail.OPEN_FRIEND_WIDGET")

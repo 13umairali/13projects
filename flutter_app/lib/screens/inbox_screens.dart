@@ -3,7 +3,6 @@ import '../core/conversation_header.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../core/api.dart';
 import '../core/mail_sync.dart';
@@ -79,21 +78,6 @@ class _ConversationsPageState extends State<ConversationsPage> with WidgetsBindi
   bool _archivedFriends = false, _organizing = false;
   String? _lastRevision;
   int _lastId = 0, _lastUnread = -1, _lastTotal = -1;
-  int _missedCalls = 0;
-
-  Future<void> _loadMissedCalls() async {
-    if (!widget.socialOnly || !mounted) return;
-    try {
-      final list = Api.list(await Api.of(context).getNoCache('calls/history'));
-      final prefs = await SharedPreferences.getInstance();
-      final viewed = prefs.getStringList('viewed_calls') ?? <String>[];
-      final unreadMissed = list.where((c) => c['outcome'] != 'answered' && c['outgoing'] != true && !viewed.contains('${c['id']}')).length;
-      if (mounted && unreadMissed != _missedCalls) {
-        setState(() => _missedCalls = unreadMissed);
-      }
-    } catch (_) {}
-  }
-
   // ── Chats tab: direct chats with Dahimail friends and teammates are part of the same list ──
   List<Item> _friends = [];
   Map<String, dynamic> _friendFeatures = {'chat': true, 'files': true, 'calls': true, 'max_mb': 10};
@@ -172,7 +156,6 @@ class _ConversationsPageState extends State<ConversationsPage> with WidgetsBindi
   Future<void> _pollNow() async {
     if (!mounted || !TickerMode.valuesOf(context).enabled) return;
     _loadFriends();
-    _loadMissedCalls();
     try {
       final j = Api.obj(await Api.of(context).getNoCache('inbox/poll', query: {'last_id': '$_lastId'}));
       final latest = (j['latest_id'] as num?)?.toInt() ?? 0, unread = (j['unread'] as num?)?.toInt() ?? 0, total = (j['total'] as num?)?.toInt() ?? 0;
@@ -251,7 +234,7 @@ class _ConversationsPageState extends State<ConversationsPage> with WidgetsBindi
       _key.currentState?.reload();
     });
     if (widget.socialOnly) _applyFriends(Api.peek('friends/chats'));
-    WidgetsBinding.instance.addPostFrameCallback((_) { _pollNow(); _sync(); _loadFriends(); _loadMissedCalls(); });
+    WidgetsBinding.instance.addPostFrameCallback((_) { _pollNow(); _sync(); _loadFriends(); });
     CallManager.I.unreadChat.addListener(_loadFriends); // a friend wrote -> the row moves up at once
     _timer = Timer.periodic(const Duration(seconds: 10), (_) => _sync());
     _poller = Timer.periodic(const Duration(seconds: 6), (_) => _pollNow());

@@ -68,7 +68,7 @@
             android:taskAffinity="com.dahify.dahimail.incoming"
             android:launchMode="singleTop"/>
         <receiver android:name=".IncomingCallDeclineReceiver" android:exported="false"/>
-        <receiver android:name=".FriendChatWidget" android:exported="false"
+        <receiver android:name=".FriendChatWidget" android:exported="true"
             android:label="@string/friend_widget_name">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/friend_chat_widget_info"/>

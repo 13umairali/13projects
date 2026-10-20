@@ -1,5 +1,6 @@
 import 'profile_avatar.dart';
 import '../core/people_card.dart';
+import '../core/people_tab_card.dart';
 import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/calls.dart';
@@ -90,7 +91,7 @@ class _PeoplePageState extends State<PeoplePage> {
               'active ${p['last_active']}'
           ].join(' · ')
         : '${p['email'] ?? ''}';
-    return PeopleCard(
+    return PeopleTabCard(
       name: '${p['name']}',
       subtitle: sub,
       status: '${p['status_label'] ?? ''}',
@@ -104,7 +105,7 @@ class _PeoplePageState extends State<PeoplePage> {
         if (mounted) setState(() => _v++);
       },
       avatar: Stack(children: [
-        ProfileAvatar(p, radius: 22),
+        ProfileAvatar(p, radius: 25),
         if (p['online'] == true)
           Positioned(
               right: 0,
@@ -138,12 +139,12 @@ class _PeoplePageState extends State<PeoplePage> {
               tooltip: 'Video call',
               icon: const Icon(Icons.videocam_rounded),
               onPressed: () => CallManager.I
-                  .startVideoCall(c, p['id'] as int, '${p['name']}')),
+                  .startVideoCall(c, p['id'] as int, '${p['name']}', avatar: p['avatar_url'] as String?)),
         if (can && feats['calls'] == true)
           IconButton(
               tooltip: 'Audio call',
               icon: const Icon(Icons.call_rounded),
-              onPressed: () => CallManager.I.startCall(c, p['id'] as int)),
+              onPressed: () => CallManager.I.startCall(c, p['id'] as int, name: '${p['name']}', avatar: p['avatar_url'] as String?)),
       ],
     );
   }
@@ -186,11 +187,11 @@ class _PeoplePageState extends State<PeoplePage> {
         Widget list(List<Item> items, String empty) => RefreshIndicator(
               onRefresh: reload,
               child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
+                  padding: const EdgeInsets.fromLTRB(0, 4, 0, 110),
                   children: [
 
                     if (f == 'team')
-                      AppCard(
+                      Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: AppCard(
                           padding: EdgeInsets.zero,
                           child: ListTile(
                               dense: true,
@@ -203,9 +204,9 @@ class _PeoplePageState extends State<PeoplePage> {
                                   style: TextStyle(fontSize: 12)),
                               trailing: const Icon(Icons.chevron_right_rounded,
                                   color: AppColors.muted),
-                              onTap: () => PeoplePage.openTeam?.call())),
+                              onTap: () => PeoplePage.openTeam?.call()))),
                     if (incoming > 0 && (f == 'all' || f == 'friends'))
-                      AppCard(
+                      Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: AppCard(
                         color: AppColors.primary.withValues(alpha: 0.08),
                         onTap: () async {
                           await pushPage(
@@ -228,7 +229,7 @@ class _PeoplePageState extends State<PeoplePage> {
                           const Icon(Icons.chevron_right_rounded,
                               color: AppColors.muted),
                         ]),
-                      ),
+                      )),
                     for (final p in items) _tile(c, p, feats),
                     if (items.isEmpty)
                       EmptyState(

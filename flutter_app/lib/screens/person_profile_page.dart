@@ -1,3 +1,4 @@
+import '../core/cached_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/api.dart';
@@ -35,7 +36,7 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
       if (mounted && !requested) {
         await showDialog<void>(context: context, builder: (c) => AlertDialog(
           title: const Text('Add a chat widget'),
-          content: const Text('Touch and hold an empty area of your home screen, open Widgets, and add Dahimail’s Friend chat widget. Tap it to choose a friend.'),
+          content: Text('Your launcher cannot add it automatically. Touch and hold an empty area of your home screen, open Widgets, and add Dahimail’s Friend chat widget. It will open ${p['name']}’s chat straight away.'),
           actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
         ));
       }
@@ -72,7 +73,7 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
       context: context,
       builder: (c) => Dialog(
         clipBehavior: Clip.antiAlias,
-        child: GestureDetector(onTap: () => Navigator.pop(c), child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Padding(padding: EdgeInsets.all(40), child: Icon(Icons.broken_image_outlined, size: 48))))),
+        child: GestureDetector(onTap: () => Navigator.pop(c), child: InteractiveViewer(child: CachedNetImage(url, fit: BoxFit.contain, placeholder: (_) => const Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(strokeWidth: 2)), error: (_) => const Padding(padding: EdgeInsets.all(40), child: Icon(Icons.broken_image_outlined, size: 48))))),
       ),
     );
   }
@@ -140,8 +141,8 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
                     const SizedBox(height: 18),
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       _action(c, 'Chat', Icons.chat_bubble_outline_rounded, canTalk ? () => pushPage(c, FriendChatPage(friend: {'id': p['id'], 'name': name, 'avatar_url': p['avatar_url']}, features: f)) : null),
-                      _action(c, 'Call', Icons.call_outlined, canTalk && f['calls'] == true ? () => CallManager.I.startCall(c, p['id'] as int) : null),
-                      _action(c, 'Video', Icons.videocam_outlined, canTalk && f['calls'] == true ? () => CallManager.I.startVideoCall(c, p['id'] as int, name) : null),
+                      _action(c, 'Call', Icons.call_outlined, canTalk && f['calls'] == true ? () => CallManager.I.startCall(c, p['id'] as int, name: name, avatar: p['avatar_url'] as String?) : null),
+                      _action(c, 'Video', Icons.videocam_outlined, canTalk && f['calls'] == true ? () => CallManager.I.startVideoCall(c, p['id'] as int, name, avatar: p['avatar_url'] as String?) : null),
                       _action(c, 'Email', Icons.mail_outline_rounded, canTalk && '${p['email'] ?? ''}'.isNotEmpty ? () => pushPage(c, ComposePage(contact: {'email': p['email'], 'first_name': name})) : null),
                       _action(c, 'Meeting', Icons.event_outlined, canTalk && f['calls'] == true ? () => scheduleMeetingWith(c, p['id'] as int) : null),
                     ]),

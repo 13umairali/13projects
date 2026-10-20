@@ -15,6 +15,7 @@ import 'prefs.dart';
 import 'sounds.dart';
 import 'theme.dart';
 import 'config.dart';
+import 'notification_identity.dart';
 import 'notification_presentation.dart';
 import 'notification_actions.dart';
 import 'notification_style.dart';
@@ -272,8 +273,8 @@ class NotifyService with WidgetsBindingObserver {
   /// Native/OS banners already displayed while Dart was asleep must not be
   /// announced again when the foreground notification poll resumes.
   Future<void> rememberRemote(Map<String, dynamic> data, {String? messageId}) => _present(() async {
-    final key = '${data['notification_id'] ?? messageId ?? ''}';
-    if (key.isEmpty) return;
+    final key = '${data['notification_id'] ?? messageId ?? ''}${NotificationIdentity.emailVersion(data)}';
+    if (key.isEmpty || key.startsWith(':v')) return;
     final storage = SharedPreferencesAsync();
     final seen = await storage.getStringList('push_shown_ids') ?? [];
     if (!seen.contains(key)) {
@@ -292,9 +293,10 @@ class NotifyService with WidgetsBindingObserver {
     final category = categoryOf(data);
     if (!prefs.notifEnabled || prefs.inQuietHours || !_catOn(category, prefs)) return;
     final notificationId = '${data['notification_id'] ?? ''}'.trim();
-    final key = notificationId.isNotEmpty ? notificationId :
-        messageId ?? '${data['type']}:${data['message_id'] ?? DateTime.now().microsecondsSinceEpoch}';
-    if (notificationId.isNotEmpty && prefs.shownIds.contains(notificationId)) return;
+    final version = NotificationIdentity.emailVersion(data);
+    final key = notificationId.isNotEmpty ? '$notificationId$version' :
+        '${messageId ?? '${data['type']}:${data['message_id'] ?? DateTime.now().microsecondsSinceEpoch}'}$version';
+    if (notificationId.isNotEmpty && prefs.shownIds.contains('$notificationId$version')) return;
     final storage = SharedPreferencesAsync();
     final seen = await storage.getStringList('push_shown_ids') ?? [];
     if (seen.contains(key)) return;
@@ -310,7 +312,7 @@ class NotifyService with WidgetsBindingObserver {
       if (_shownChatMessages.length > 100) _shownChatMessages.remove(_shownChatMessages.first);
     }
     await storage.setStringList('push_shown_ids', [...seen.skip(seen.length > 99 ? seen.length - 99 : 0), key]);
-    if (data['notification_id'] != null) await prefs.rememberShown(['${data['notification_id']}']);
+    if (data['notification_id'] != null) await prefs.rememberShown(['${data['notification_id']}$version', '${data['notification_id']}']);
   }
 
   /// Sent from Settings → Notifications so the user can check sound, vibration and the icon.

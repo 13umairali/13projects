@@ -1,3 +1,4 @@
+import 'cached_image.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -119,7 +120,7 @@ class AppCard extends StatelessWidget {
         decoration: color == null ? cardDecoration(context) : cardDecoration(context).copyWith(color: Color.alphaBlend(color!, Theme.of(context).colorScheme.surface)),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(Rad.l),
+          borderRadius: BorderRadius.circular(14),
           clipBehavior: Clip.antiAlias,
           child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
         ),
@@ -284,19 +285,40 @@ class Avatar extends StatelessWidget {
     return _palette[h % _palette.length];
   }
 
+  /// "To: John Doe" -> "John Doe": the To:/From:/Re: prefix is not part of the person's name.
+  static String cleanName(String name) =>
+      name.trim().replaceFirst(RegExp(r'^(to|from|cc|bcc|re|fwd?)\s*:\s*', caseSensitive: false), '').trim();
+
+  /// Up to two initials: "John Doe" -> "JD", "Dahimail" -> "D".
+  static String initials(String name) {
+    final words = cleanName(name)
+        .split(RegExp(r'\s+'))
+        .map((w) => w.replaceFirst(RegExp(r'^[^\p{L}\p{N}]+', unicode: true), ''))
+        .where((w) => w.isNotEmpty)
+        .toList();
+    if (words.isEmpty) return '';
+    if (words.length == 1) return words.first.characters.first.toUpperCase();
+    return (words.first.characters.first + words.last.characters.first).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c = color ?? colorFor(name);
-    final label = name.trim();
-    final fallback = label.isEmpty || label.toLowerCase() == 'unknown' || label == 'null'
-        ? Icon(Icons.person_rounded, color: Colors.white, size: radius)
-        : Text(label.characters.first.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700).copyWith(fontSize: radius * 0.95));
+    final label = cleanName(name);
+    final c = color ?? colorFor(label);
+    // Soft tinted fill with a readable coloured monogram (modern SaaS) instead of a saturated disc with white text.
+    final surface = Theme.of(context).colorScheme.surface;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fill = Color.alphaBlend(c.withValues(alpha: dark ? .26 : .14), surface);
+    final ink = AppColors.readableAccent(c, fill);
+    final text = initials(name);
+    final fallback = text.isEmpty || label.toLowerCase() == 'unknown' || label == 'null'
+        ? Icon(Icons.person_rounded, color: ink, size: radius)
+        : Text(text, style: TextStyle(color: ink, fontWeight: FontWeight.w700, letterSpacing: .3, fontSize: radius * (text.length > 1 ? 0.74 : 0.9)));
     final cleanUrl = (url != null && url!.trim().isNotEmpty && (url!.startsWith('http://') || url!.startsWith('https://'))) ? url!.trim() : null;
-    return CircleAvatar(radius: radius, backgroundColor: c,
-      foregroundImage: cleanUrl != null ? NetworkImage(cleanUrl) : null,
+    return CircleAvatar(radius: radius, backgroundColor: fill,
+      foregroundImage: avatarProvider(cleanUrl, width: (radius * 6).round()),
       onForegroundImageError: cleanUrl != null ? (_, __) {} : null,
       child: fallback);
-
   }
 }
 
@@ -349,9 +371,13 @@ class StatusChip extends StatelessWidget {
     final dark = AppColors.isDark(context);
     final fg = dark && (_c == AppColors.success || _c == AppColors.warn || _c == AppColors.danger || _c == AppColors.info) ? _c : _fg(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(color: _c.withValues(alpha: dark ? 0.18 : 0.12), borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600)),
+      padding: const EdgeInsets.fromLTRB(8, 3, 9, 3),
+      decoration: BoxDecoration(color: _c.withValues(alpha: dark ? 0.18 : 0.10), borderRadius: BorderRadius.circular(999)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 6, height: 6, decoration: BoxDecoration(color: fg, shape: BoxShape.circle)),
+        const SizedBox(width: 5),
+        Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fg, fontSize: 11.5, height: 1.2, fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 }
@@ -438,6 +464,7 @@ class _SkeletonListState extends State<SkeletonList> with SingleTickerProviderSt
 
 /// Loads once (and on reload) and renders [builder]. Shows spinner / error with retry.
 final Map<String, dynamic> _asyncViewCache = {};
+bool _resetHooked = false;
 
 class AsyncView<T> extends StatefulWidget {
   final Future<T> Function(Api api) load;
@@ -446,7 +473,10 @@ class AsyncView<T> extends StatefulWidget {
   final bool quiet;
   /// What to show while loading instead of the full-screen list skeleton (use a small block when the view is only a PART of a page).
   final Widget? placeholder;
-  const AsyncView({super.key, required this.load, required this.builder, this.quiet = false, this.placeholder});
+  /// Stable name for the saved copy. Without it the copy is keyed by the widget key + load function; give one when
+  /// several screens share the same load code but show different data (e.g. per person).
+  final String? cacheKey;
+  const AsyncView({super.key, required this.load, required this.builder, this.quiet = false, this.placeholder, this.cacheKey});
   @override
   State<AsyncView<T>> createState() => _AsyncViewState<T>();
 }
@@ -462,7 +492,13 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
   @override
   void initState() {
     super.initState();
-    _cacheKey = widget.load.toString();
+    // Closures from the same line of code print identically, so the old key mixed up screens that load
+    // different data. Include the explicit name and the widget key.
+    _cacheKey = '${widget.cacheKey ?? ''}|${widget.key}|${widget.load}';
+    if (!_resetHooked) {
+      _resetHooked = true;
+      Api.resetHooks.add(_asyncViewCache.clear);
+    }
     if (_asyncViewCache.containsKey(_cacheKey)) {
       _data = _asyncViewCache[_cacheKey] as T;
       _loading = false;

@@ -11,6 +11,7 @@ import '../screens/meeting_room_page.dart';
 import 'api.dart';
 import 'realtime.dart';
 import 'meeting_recording.dart';
+import 'meeting_engine.dart';
 import 'android_callkit.dart';
 import 'app_permissions.dart';
 import 'call_audio.dart';
@@ -769,7 +770,7 @@ class CallManager with WidgetsBindingObserver {
   }
 
   /// Audio call = an audio-only room (so more people can be added during the call, and the camera can be switched on later).
-  Future<void> startCall(BuildContext context, int friendId) => startVideoCall(context, friendId, '', audioOnly: true);
+  Future<void> startCall(BuildContext context, int friendId, {String name = '', String? avatar}) => startVideoCall(context, friendId, name, audioOnly: true, avatar: avatar);
 
   /// The old one-to-one audio engine (kept only for calls that come from an older app version).
   Future<void> startLegacyCall(BuildContext context, int friendId) async {
@@ -799,7 +800,7 @@ class CallManager with WidgetsBindingObserver {
     final accepted = act == 'call_accept';
     if (accepted) { inRoom = true; _stopRing(); } else { _startRing(); }
     rootNavKey.currentState?.push(PageRouteBuilder<void>(transitionDuration: accepted ? Duration.zero : const Duration(milliseconds: 200), reverseTransitionDuration: Duration.zero, fullscreenDialog: true, pageBuilder: (context, animation, secondaryAnimation) => accepted
-        ? MeetingRoomPage(code: '${c['meeting']}', title: '${(c['peer'] as Map?)?['name'] ?? 'Call'}', autoJoin: true, audioOnly: c['audio_only'] == true, answerCallId: id)
+        ? MeetingRoomPage(code: '${c['meeting']}', title: '${(c['peer'] as Map?)?['name'] ?? 'Call'}', autoJoin: true, audioOnly: c['audio_only'] == true, answerCallId: id, call: true, peerAvatar: (c['peer'] as Map?)?['avatar_url'] as String?)
         : IncomingVideoCallPage(call: c, autoAction: act))).whenComplete(() {
       _videoOpen = false;
       if (!incomingMinimized) { incomingVideo = null; _stopRing(); }
@@ -808,7 +809,7 @@ class CallManager with WidgetsBindingObserver {
   }
 
   /// From the chat / profile: a private 2-person video room; the friend's phone (or browser) rings.
-  Future<void> startVideoCall(BuildContext context, int friendId, String name, {bool audioOnly = false}) async {
+  Future<void> startVideoCall(BuildContext context, int friendId, String name, {bool audioOnly = false, String? avatar}) async {
     final s = _session;
     if (s == null || active != null || inRoom) return;
     try {
@@ -816,10 +817,37 @@ class CallManager with WidgetsBindingObserver {
       final data = raw is Map ? raw['data'] : null;
       final code = data is Map ? data['meeting'] : null;
       if (code == null) throw ApiException(422, raw is Map ? '${raw['message'] ?? 'Could not start the video call'}' : 'Could not start the video call');
-      if (context.mounted) await Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => MeetingRoomPage(code: '$code', title: name.isEmpty ? '${audioOnly ? 'Audio' : 'Video'} call' : '${audioOnly ? 'Audio' : 'Video'} call with $name', autoJoin: true, audioOnly: audioOnly)));
+      _trackReachability(s, '$code', friendId, data);
+      if (context.mounted) await Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => MeetingRoomPage(code: '$code', title: name.isEmpty ? '${audioOnly ? 'Audio' : 'Video'} call' : '${audioOnly ? 'Audio' : 'Video'} call with $name', autoJoin: true, audioOnly: audioOnly, call: true, peerAvatar: avatar)));
     } on ApiException catch (e) {
       if (context.mounted) UtilityNotice.show(context, e.message, error: true);
     }
+  }
+
+
+  /// Outgoing call: tell the room whether the other person is online / connected, so the caller sees
+  /// "Ringing…" + ringback tone (online) or "Calling…" + dial tone (offline). Re-checks for a short while, because
+  /// the other person may come online (e.g. opens the app from the push notification) while the call is still unanswered.
+  void _trackReachability(Session s, String code, int friendId, Map data) {
+    for (final k in const ['peer_online', 'callee_online', 'recipient_online', 'delivered', 'ringing']) {
+      if (data[k] == true) { MeetingEngine.hintReachable(code, true); return; }
+    }
+    final peer = data['peer'];
+    if (peer is Map && peer['online'] == true) { MeetingEngine.hintReachable(code, true); return; }
+    unawaited(() async {
+      for (var i = 0; i < 12; i++) {
+        if (i > 0) await Future<void>.delayed(const Duration(seconds: 3));
+        if (i > 0 && !MeetingEngine.isWaitingForPeer(code)) return;
+        try {
+          final d = Api.obj(await Api(s).getNoCache('people'));
+          for (final k in const ['friends', 'team']) {
+            for (final p in Api.list(d[k])) {
+              if ((p['id'] as num?)?.toInt() == friendId && p['online'] == true) { MeetingEngine.hintReachable(code, true); return; }
+            }
+          }
+        } catch (_) {}
+      }
+    }());
   }
 
   /// Incoming call: a looping ringtone + vibration.

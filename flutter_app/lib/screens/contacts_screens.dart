@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/people_card.dart';
+import '../core/people_tab_card.dart';
 import '../core/contact_io.dart';
 import '../core/forms.dart';
 import '../core/paged.dart';
@@ -78,6 +79,7 @@ class _ContactsPageState extends State<ContactsPage> {
       query: {if (_q.isNotEmpty) 'search': _q, if (_status.isNotEmpty) 'status': _status, if (_tagId != null) 'tag_id': '$_tagId', 'per_page': '30'},
       emptyText: 'No contacts yet. Tap “Add contact”.',
       emptyIcon: Icons.people_outline,
+      padding: widget.peopleCards ? const EdgeInsets.only(top: 4, bottom: 96) : const EdgeInsets.fromLTRB(16, 8, 16, 96),
       header: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -166,39 +168,22 @@ class _ContactsPageState extends State<ContactsPage> {
       itemBuilder: (c, it, reload) {
         final id = it['id'] as int;
         final sel = _sel.contains(id);
-        if (widget.peopleCards) {
-          return PeopleCard(
-            name: contactName(it), subtitle: [pick(it, ['email']), pick(it, ['company'])].where((e) => e.isNotEmpty).join(' · '),
-            selected: sel,
-            avatar: sel ? const CircleAvatar(radius: 22, backgroundColor: AppColors.primary, child: Icon(Icons.check, color: Colors.white)) :
-              Avatar(contactName(it), url: it['avatar_url'] as String?, radius: 22),
-            badges: [if (it['status'] != null) PeopleCardBadge('${it['status']}'[0].toUpperCase() + '${it['status']}'.substring(1))],
-            actions: const [Padding(padding: EdgeInsets.all(12), child: Icon(Icons.chevron_right_rounded, color: AppColors.muted))],
-            onLongPress: () => setState(() => sel ? _sel.remove(id) : _sel.add(id)),
-            onTap: () async {
-              if (_sel.isNotEmpty) return setState(() => sel ? _sel.remove(id) : _sel.add(id));
-              await pushPage(c, ContactDetailPage(id: id));
-              reload();
-            },
-          );
+        final nm = contactName(it);
+        final sub = [pick(it, ['email']), pick(it, ['company'])].where((e) => e.isNotEmpty).join(' · ');
+        final av = sel ? const CircleAvatar(radius: 25, backgroundColor: AppColors.primary, child: Icon(Icons.check, color: Colors.white)) :
+              Avatar(nm, url: it['avatar_url'] as String?, radius: 25);
+        final badges = <Widget>[if (it['status'] != null) PeopleCardBadge('${it['status']}'[0].toUpperCase() + '${it['status']}'.substring(1))];
+        const actions = <Widget>[Icon(Icons.chevron_right_rounded, color: AppColors.muted)];
+        void longPress() => setState(() => sel ? _sel.remove(id) : _sel.add(id));
+        Future<void> tap() async {
+          if (_sel.isNotEmpty) return setState(() => sel ? _sel.remove(id) : _sel.add(id));
+          await pushPage(c, ContactDetailPage(id: id));
+          reload();
         }
-        return AppCard(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: EdgeInsets.zero,
-          child: ListTile(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            onLongPress: () => setState(() => sel ? _sel.remove(id) : _sel.add(id)),
-            leading: sel ? const CircleAvatar(backgroundColor: AppColors.primary, child: Icon(Icons.check, color: Colors.white)) : Avatar(contactName(it)),
-            title: Text(contactName(it), style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text([pick(it, ['email']), pick(it, ['company'])].where((e) => e.isNotEmpty).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: it['status'] == null ? null : StatusChip('${it['status']}'),
-            onTap: () async {
-              if (_sel.isNotEmpty) return setState(() => sel ? _sel.remove(id) : _sel.add(id));
-              await pushPage(c, ContactDetailPage(id: id));
-              reload();
-            },
-          ),
-        );
+        // Friends screen → Customers tab uses the full-name card; every other contacts list keeps the original card.
+        return widget.peopleCards
+            ? PeopleTabCard(name: nm, subtitle: sub, selected: sel, avatar: av, badges: badges, actions: actions, onLongPress: longPress, onTap: tap)
+            : PeopleCard(name: nm, subtitle: sub, selected: sel, avatar: av, badges: badges, actions: actions, onLongPress: longPress, onTap: tap);
       },
     );
   }

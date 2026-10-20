@@ -11,6 +11,7 @@ import 'chat_cache.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'device_env.dart';
 import 'session.dart';
+import 'cached_image.dart';
 
 class ApiException implements Exception {
   final int status;
@@ -43,8 +44,15 @@ class Api {
   static final Map<String, int> _requestVersions = {};
   static int _requestSerial = 0;
 
+  /// Screen-level caches (e.g. AsyncView) register here so an account / workspace change wipes them too.
+  static final List<void Function()> resetHooks = [];
+  static void _runResetHooks() {
+    for (final h in List.of(resetHooks)) { try { h(); } catch (_) {} }
+  }
+
   /// Drops everything in memory (used after big changes such as connecting an account).
   static void clearCache() {
+    _runResetHooks();
     _cacheGeneration++;
     _cache.clear();
     _requestVersions.clear();
@@ -192,6 +200,7 @@ class Api {
   static Future<void> clearSaved() async {
     _saveTimer?.cancel();
     final scope = _userKey;
+    _runResetHooks();
     _cacheGeneration++;
     _cache.clear();
     _requestVersions.clear();
@@ -216,6 +225,7 @@ class Api {
   static Future<void> wipeCache() async {
     _saveTimer?.cancel();
     final scope = _userKey;
+    _runResetHooks();
     _cacheGeneration++;
     _cache.clear();
     _requestVersions.clear();
@@ -240,6 +250,7 @@ class Api {
       await prefs.remove('device_contacts_enabled_$scope');
       await prefs.remove('device_contacts_paused_$scope');
     }
+    await DiskCachedImage.clearAll(); // profile photos belong to the signed-out account
     _userKey = null;
   }
 
@@ -256,6 +267,7 @@ class Api {
     }
     final seg = path.split('?').first.split('/').first;
     if (seg == 'workspaces' || seg == 'auth') {
+      _runResetHooks();
       _cacheGeneration++;
       _cache.clear();
     _requestVersions.clear();

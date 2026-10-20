@@ -33,23 +33,36 @@ internal object NativeNotificationCard {
             setViewVisibility(R.id.notification_time, detailVisibility)
         }
 
-    // Match Avatar.colorFor and the single initial used by the in-app tile.
+    fun cleanName(name: String): String =
+        name.trim().replace(Regex("^(to|from|cc|bcc|re|fwd?)\\s*:\\s*", RegexOption.IGNORE_CASE), "").trim()
+
+    /** "To: John Doe" -> "JD". Prefixes such as To:/From:/Re: are not part of the person's name. */
+    fun initials(name: String): String {
+        val clean = name.trim().replace(Regex("^(to|from|cc|bcc|re|fwd?)\\s*:\\s*", RegexOption.IGNORE_CASE), "").trim()
+        val words = clean.split(Regex("\\s+")).filter { w -> w.any { it.isLetterOrDigit() } }
+            .map { w -> w.dropWhile { !it.isLetterOrDigit() } }
+        if (words.isEmpty()) return "D"
+        fun first(w: String): String {
+            val b = java.text.BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(w) }
+            return w.substring(0, b.next()).uppercase(Locale.ROOT)
+        }
+        return if (words.size == 1) first(words[0]) else first(words.first()) + first(words.last())
+    }
+
+    // Match Avatar.colorFor and the initials used by the in-app tile.
     fun avatar(name: String): Bitmap {
         val colors = intArrayOf(0xFF5F33E1.toInt(), 0xFF0E7C86.toInt(),
             0xFFC2410C.toInt(), 0xFFBE185D.toInt(), 0xFF1D4ED8.toInt(),
             0xFF047857.toInt(), 0xFFB45309.toInt(), 0xFF7C3AED.toInt())
+        val initial = initials(name)
         var hash = 0
-        for (char in name.lowercase(Locale.ROOT)) hash = (hash * 31 + char.code) and 0x7fffffff
+        for (char in name.trim().replace(Regex("^(to|from|cc|bcc|re|fwd?)\\s*:\\s*", RegexOption.IGNORE_CASE), "").lowercase(Locale.ROOT)) hash = (hash * 31 + char.code) and 0x7fffffff
         val bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors[hash % colors.size] }
         canvas.drawCircle(64f, 64f, 64f, paint)
-        // A character boundary keeps emoji and composed initials intact.
-        val label = name.trim().ifBlank { "D" }
-        val boundary = java.text.BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(label) }
-        val initial = label.substring(0, boundary.next()).uppercase(Locale.ROOT)
         paint.color = Color.WHITE
-        paint.textSize = 61f
+        paint.textSize = if (initial.length > 1) 50f else 61f
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.DEFAULT_BOLD
         canvas.drawText(initial, 64f, 64f - (paint.ascent() + paint.descent()) / 2, paint)

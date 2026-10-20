@@ -24,60 +24,76 @@ class PeopleCard extends StatelessWidget {
       this.onLongPress});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final muted = AppColors.mutedOf(context);
+    // Call / chat buttons share one look: 40 px tonal circles in the brand colour.
+    final actionTheme = Theme.of(context).copyWith(
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          backgroundColor: scheme.primary.withValues(alpha: .09),
+          foregroundColor: scheme.primary,
+          minimumSize: const Size(40, 40),
+          fixedSize: const Size(40, 40),
+          padding: EdgeInsets.zero,
+          iconSize: 20,
+          shape: const CircleBorder(),
+        ),
+      ),
+    );
+    return GestureDetector(
       onLongPress: onLongPress,
       child: AppCard(
-        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-        color: selected ? Theme.of(context).colorScheme.primaryContainer : null,
+        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: 8),
+        color: selected ? scheme.primaryContainer : null,
         onTap: onTap,
         child: LayoutBuilder(builder: (context, constraints) {
-          final stackActions = constraints.maxWidth < 280 ||
-              MediaQuery.textScalerOf(context).scale(1) > 1.3;
-          final text =
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-            if (badges.isNotEmpty)
-              Padding(
-                  padding: const EdgeInsets.only(top: 4, bottom: 2),
-                  child: Wrap(spacing: 6, runSpacing: 4, children: badges)),
+          final stackActions = constraints.maxWidth < 300 || MediaQuery.textScalerOf(context).scale(1) > 1.3;
+          final text = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Flexible(
+                child: Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15.5, height: 1.25, color: scheme.onSurface)),
+              ),
+              for (final b in badges) Padding(padding: const EdgeInsetsDirectional.only(start: 6), child: b),
+            ]),
             if (subtitle.isNotEmpty)
-              Text(subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 12.5, color: AppColors.mutedOf(context))),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: muted)),
+              ),
             if (status.isNotEmpty)
-              Text(status,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: statusColor ?? AppColors.mutedOf(context))),
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: statusColor ?? muted)),
+              ),
           ]);
-          return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  avatar,
-                  const SizedBox(width: 12),
-                  Expanded(child: text),
-                  if (!stackActions) ...actions,
-                ]),
-                if (stackActions && actions.isNotEmpty)
-                  Padding(
-                      padding: const EdgeInsets.only(top: 6, left: 4),
-                      child: Wrap(
-                          alignment: WrapAlignment.end,
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: actions)),
+          Widget spaced(List<Widget> items) => Row(mainAxisSize: MainAxisSize.min, children: [
+                for (var i = 0; i < items.length; i++) ...[if (i > 0) const SizedBox(width: 6), items[i]],
               ]);
+          return Theme(
+            data: actionTheme,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                avatar,
+                const SizedBox(width: 12),
+                Expanded(child: text),
+                if (!stackActions && actions.isNotEmpty) Padding(padding: const EdgeInsetsDirectional.only(start: 8), child: spaced(actions)),
+              ]),
+              if (stackActions && actions.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Wrap(alignment: WrapAlignment.end, spacing: 6, runSpacing: 6, children: actions),
+                ),
+            ]),
+          );
         }),
-      ));
+      ),
+    );
+  }
 }
 
 class PeopleCardBadge extends StatelessWidget {
@@ -90,9 +106,9 @@ class PeopleCardBadge extends StatelessWidget {
     final fill = Color.alphaBlend(
         c.withValues(alpha: .12), Theme.of(context).colorScheme.surface);
     return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration:
-            BoxDecoration(color: fill, borderRadius: BorderRadius.circular(8)),
+            BoxDecoration(color: fill, borderRadius: BorderRadius.circular(999)),
         child: Text(label,
             style: TextStyle(
                 fontSize: 10.5,

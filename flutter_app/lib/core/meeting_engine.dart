@@ -37,7 +37,49 @@ class MeetingPeer {
 class MeetingEngine extends ChangeNotifier {
   final Api api;
   final String code;
-  MeetingEngine(this.api, this.code);
+  MeetingEngine(this.api, this.code) {
+    _byCode[code] = this;
+    if (_reachHint[code] == true) peerReachable = true;
+  }
+
+  // ───── outgoing call: is the other person reachable? ─────
+  // offline / not connected  -> "Calling…" + dial tone;   online / connected (their device rings) -> "Ringing…" + ringback tone
+  static final Map<String, MeetingEngine> _byCode = {};
+  static final Map<String, bool> _reachHint = {};
+  bool? peerReachable;
+
+  /// Called by the call starter (and by server hints) when it learns the other person is online / their device rings.
+  static void hintReachable(String code, bool reachable) {
+    if (reachable) _reachHint[code] = true;
+    _byCode[code]?._setReachable(reachable);
+  }
+
+  /// True while a started call is still unanswered and the other person has not been seen online yet.
+  static bool isWaitingForPeer(String code) {
+    final e = _byCode[code];
+    return e != null && !e._closed && !e._accepted && e.peerReachable != true;
+  }
+
+  /// The local user already answered this call (callee side) before the room opened: show "Connecting…" at once
+  /// and never play a calling / ringing tone for it.
+  void markAnswered() {
+    if (_closed || _accepted) return;
+    _accepted = true;
+    _tones.accepted();
+  }
+
+  void _setReachable(bool v) {
+    if (_closed || v == peerReachable || (peerReachable == true && !v)) return;
+    peerReachable = v;
+    if (v && !_accepted && phase == 'in' && isCall && role == 'host') _tones.ringing();
+    notifyListeners();
+  }
+
+  void _readReachHints(Map m) {
+    for (final k in const ['peer_online', 'callee_online', 'recipient_online', 'delivered', 'ringing']) {
+      if (m[k] == true) { _setReachable(true); return; }
+    }
+  }
 
   /// idle | joining | waiting | in | ended | error
   String phase = 'idle';
@@ -56,7 +98,11 @@ class MeetingEngine extends ChangeNotifier {
   final _tones = CallTones();
   bool get speaker => audio.speaker;
   bool _mediaConnected = false;
-  String get callProgress => _mediaConnected ? 'Connected' : _accepted ? 'Accepted · Connecting audio…' : 'Calling…';
+  DateTime? connectedAt; // when the audio/video link came up (call timer)
+  bool get mediaConnected => _mediaConnected;
+  /// Text under the name on the call screen while the call is not connected yet.
+  String get callStatus => _accepted ? 'Connecting…' : (peerReachable == true ? 'Ringing…' : 'Calling…');
+  String get callProgress => _mediaConnected ? 'Connected' : _accepted ? 'Accepted · Connecting audio…' : (peerReachable == true ? 'Ringing…' : 'Calling…');
 
   // ───── recording (consent and delivery controlled by the server) ─────
   late final _recorder = MeetingRecording(api, code, (text) { recNotice = text; if (!_disposed) notifyListeners(); });
@@ -158,7 +204,8 @@ class MeetingEngine extends ChangeNotifier {
       _statusLoop?.cancel();
       notifyListeners();
     } else if (const ["declined", "cancelled", "missed", "ended"].contains(status)) {
-      unawaited(_end(status == "declined" ? "Call declined" : "Call ended"));
+      // Same wording as the one-to-one call screen: the caller sees "No answer", the callee "Missed call".
+      unawaited(_end(status == "declined" ? "Call declined" : status == "missed" ? (role == 'host' ? 'No answer' : 'Missed call') : "Call ended"));
     }
   }
 
@@ -186,6 +233,7 @@ class MeetingEngine extends ChangeNotifier {
       if (e['group'] != true) _callState(e['status'] as String? ?? (e['reason'] == 'answered' ? 'active' : e['reason'] as String?));
       return;
     }
+    if (e['type'] == 'call_ringing' || e['type'] == 'call_delivered') { _setReachable(true); return; }
     if (e['type'] == 'meeting_ended') { _end(meeting['kind'] == 'call' ? 'The call was ended by another participant.' : 'The meeting was ended by another participant.'); return; }
     if (e['type'] == 'meeting_changed') { _pollAgain = _polling; _poll(); return; }
     if (e['type'] != 'meeting_signal' || e['to'] != pid) return;
@@ -426,7 +474,8 @@ class MeetingEngine extends ChangeNotifier {
       } catch (_) {}
       if (_closed) return;
       _realtime ??= Realtime.I.events.listen(_live);
-      if (isCall && role == 'host' && !_accepted && meeting['call_status'] != 'active') _tones.dialing();
+      _readReachHints(meeting);
+      if (isCall && role == 'host' && !_accepted && meeting['call_status'] != 'active') { if (peerReachable == true) { _tones.ringing(); } else { _tones.dialing(); } }
       _callState(meeting['call_status'] as String?);
       if (_closed) return;
       if (isCall && role == 'host' && !_accepted) {
@@ -465,7 +514,7 @@ class MeetingEngine extends ChangeNotifier {
       if (_closed) return;
       _misses = 0;
       if (j['meeting'] is Map) meeting = Map<String, dynamic>.from(j['meeting'] as Map);
-      if (isCall) _callState(meeting['call_status'] as String?);
+      if (isCall) { _readReachHints(meeting); _callState(meeting['call_status'] as String?); }
       if (_closed) return;
       final me = j['me'] is Map ? Map<String, dynamic>.from(j['me'] as Map) : <String, dynamic>{};
       final st = '${me['status']}';
@@ -626,6 +675,7 @@ class MeetingEngine extends ChangeNotifier {
         debugPrint('[RTC-DIAG][meeting peer $id] peer=$s');
         if (s == RTCPeerConnectionState.RTCPeerConnectionStateConnected && peers[id] == p && !_closed) {
           _mediaConnected = true;
+          connectedAt ??= DateTime.now();
           _tones.connected();
           notifyListeners();
           unawaited(audio.apply().catchError((_) {}));
@@ -916,6 +966,8 @@ class MeetingEngine extends ChangeNotifier {
 
   Future<void> _releaseMedia() async {
     _closed = true;
+    if (identical(_byCode[code], this)) _byCode.remove(code);
+    _reachHint.remove(code);
     await _tones.stop();
     _loop?.cancel();
     _statusLoop?.cancel();

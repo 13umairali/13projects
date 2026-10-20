@@ -78,14 +78,15 @@ class _FriendsPageState extends State<FriendsPage> {
   }
 
   Widget _card(Item p, {String? subtitle, List<Widget> actions = const [], Widget? trailing, bool openable = false}) => PeopleListRow(
-    avatar: PeopleAvatar(name: '${p['name']}', url: p['avatar_url'] as String?, online: p['online'] == true),
+    avatar: PeopleAvatar(name: '${p['name']}', url: p['avatar_url'] as String?, online: p['online'] == true, radius: 25),
+    card: true,
     name: '${p['name']}', preview: subtitle ?? '', actions: actions, trailing: trailing,
     unreadCount: openable ? ((p['unread'] as num?) ?? 0).toInt() : 0,
     indicators: [if (openable && trailing == null) const Icon(Icons.chevron_right_rounded)],
     onTap: () => _openProfile(p),
   );
 
-  static final _small = ButtonStyle(minimumSize: WidgetStateProperty.all(const Size(0, 44)), padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 16)));
+  static final _small = ButtonStyle(minimumSize: WidgetStateProperty.all(const Size(0, 42)), padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12)), shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
 
   @override
   Widget build(BuildContext context) => AsyncView<Map<String, dynamic>>(
@@ -142,7 +143,7 @@ class _FriendsPageState extends State<FriendsPage> {
                         icon: const Icon(Icons.more_vert_rounded, size: 20),
                         onSelected: (action) {
                           if (action == 'email') pushPage(c, ComposePage(contact: {'email': p['email'], 'first_name': p['name']}));
-                          if (action == 'call') CallManager.I.startCall(c, p['id'] as int);
+                          if (action == 'call') CallManager.I.startCall(c, p['id'] as int, name: '${p['name']}', avatar: p['avatar_url'] as String?);
                         },
                         itemBuilder: (_) => [
                           const PopupMenuItem(value: 'email', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.mail_outline_rounded), title: Text('Email'))),

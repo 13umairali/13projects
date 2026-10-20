@@ -104,6 +104,7 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dahify.dahimail/call_tones").setMethodCallHandler { call, result ->
             when (call.method) {
                 "dialing" -> { DeviceSounds.playCallTone(this, false); result.success(null) }
+                "ringback" -> { DeviceSounds.playCallTone(this, "ringback"); result.success(null) }
                 "connected" -> { DeviceSounds.playCallTone(this, true); result.success(null) }
                 "stop" -> { DeviceSounds.stopCallTone(); result.success(null) }
                 else -> result.notImplemented()

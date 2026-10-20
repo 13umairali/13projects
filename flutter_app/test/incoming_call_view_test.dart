@@ -55,11 +55,11 @@ void main() {
     expect(find.text('AE'), findsOneWidget);
     expect(find.byIcon(Icons.call), findsOneWidget);
     expect(find.byIcon(Icons.videocam), findsNothing);
-    expect(tester.getSize(find.byType(ClipOval)), const Size.square(112));
+    expect(tester.getSize(find.byType(ClipOval)), const Size.square(160));
     expect(tester.getSize(find.byType(IconButton).first), const Size.square(70));
     final name = tester.widget<Text>(find.text('Alice Example'));
     expect(name.style?.fontFamily, 'Roboto');
-    expect(name.style?.fontSize, 26);
-    expect(name.style?.fontWeight, FontWeight.w700);
+    expect(name.style?.fontSize, 28);
+    expect(name.style?.fontWeight, FontWeight.w500);
   });
 }

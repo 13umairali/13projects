@@ -82,11 +82,13 @@ import WebRTC
     tones.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
       switch call.method {
-      case "dialing", "connected":
+      // dialing  = calling (the other person is not connected yet), ringback = their device is ringing,
+      // connected = one short confirmation. Same three tones as Android.
+      case "dialing", "ringback", "connected":
         self.callTone?.stop()
         self.callTone = nil
         let connected = call.method == "connected"
-        let key = FlutterDartProject.lookupKey(forAsset: "assets/sounds/\(connected ? "connected" : "dialing").wav")
+        let key = FlutterDartProject.lookupKey(forAsset: "assets/sounds/\(call.method).wav")
         if let path = Bundle.main.path(forResource: key, ofType: nil) {
           do {
             // CallKit owns activation for an answered system call. For an

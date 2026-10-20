@@ -1,4 +1,5 @@
 import '../core/utility_notice.dart';
+import '../core/wa_call_view.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -26,7 +27,10 @@ class MeetingRoomPage extends StatefulWidget {
   final String? title;
   final bool autoJoin;
   final bool audioOnly; // audio call: the camera is not asked for; it can be switched on later
-  const MeetingRoomPage({super.key, required this.code, this.answerCallId, this.title, this.autoJoin = false, this.audioOnly = false});
+  final bool call; // a one-to-one call (not a meeting): the messaging-app style call screen is used
+  final String? peerAvatar;
+  final bool answered; // the call was already answered on the ringing screen (callee): "Connecting…", no calling tone
+  const MeetingRoomPage({super.key, required this.code, this.answerCallId, this.title, this.autoJoin = false, this.audioOnly = false, this.call = false, this.peerAvatar, this.answered = false});
   @override
   State<MeetingRoomPage> createState() => _MeetingRoomPageState();
 }
@@ -58,6 +62,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
       _started = true; // back from the small window: the call kept running, nothing to join again
     } else if (widget.autoJoin) {
       _started = true;
+      if (widget.answered) _e.markAnswered();
       _e.join(audio: true, video: !widget.audioOnly, answerCallId: widget.answerCallId);
     } else {
       _e.startPreview(wantVideo: true);
@@ -191,12 +196,13 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         if (!didPop) _backPressed();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF111118),
+        backgroundColor: WaCallView.bg,
         body: LayoutBuilder(builder: (context, box) {
           // Android resizes before its PiP callback reaches Dart. Both paths must
           // render only media, with no full-size controls or self-view overlays.
           if (RoomHost.I.inPip || box.maxWidth < 300 || box.maxHeight < 280) return RoomMediaView(engine: _e);
-          return SafeArea(child: _body());
+          // Every phase draws its own call-style chrome and handles the safe areas itself.
+          return _body();
         }),
       ),
     );
@@ -205,157 +211,252 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
   Widget _body() {
     switch (_e.phase) {
       case 'joining':
-        return _room();
+        return _useWaCall ? _waCall() : _statusScreen(status: 'Connecting…', buttons: [_leaveButton()], onBack: _minimize);
       case 'waiting':
-        return _center(Icons.hourglass_top_rounded, 'Waiting for the host to let you in…', 'You will join automatically.', action: 'Leave', onAction: _leaveFlow);
+        return _statusScreen(status: 'Waiting for the host to let you in…\nYou will join automatically.', buttons: [_leaveButton()], onBack: _minimize);
       case 'in':
-        return _room();
+        if (_useWaCall) return _waCall();
+        if (_meetingAlone) return _meetingAloneScreen();
+        return _meetingRoom();
       case 'ended':
-        return _room();
+        return _useWaCall ? _waCall() : _statusScreen(status: _e.message ?? 'Meeting ended');
       case 'error':
-        return _center(Icons.error_outline_rounded, _e.message ?? 'Could not join.', '', action: 'Close', onAction: () => Navigator.of(context).pop());
+        return _statusScreen(
+          icon: Icons.error_outline_rounded,
+          status: _e.message ?? 'Could not join.',
+          pulse: false,
+          buttons: [WaCallButton(icon: Icons.close_rounded, tooltip: 'Close', onTap: () => Navigator.of(context).pop())],
+        );
       default:
         return _prejoin();
     }
   }
 
-  Widget _center(IconData icon, String title, String sub, {required String action, required VoidCallback onAction}) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, color: Colors.white70, size: 54),
-            const SizedBox(height: 16),
-            Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-            if (sub.isNotEmpty) ...[const SizedBox(height: 8), Text(sub, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60))],
-            const SizedBox(height: 22),
-            FilledButton(onPressed: onAction, child: Text(action)),
-          ]),
-        ),
+  // ───────────── shared call-style pieces (the same look as the one-to-one call screens) ─────────────
+  String get _roomTitle {
+    final t = widget.title;
+    return t != null && t.trim().isNotEmpty ? t : _e.title;
+  }
+
+  /// Dialing, ringing, connecting, waiting room, errors: the call screen with the meeting's name and a status line.
+  Widget _statusScreen({required String status, IconData icon = Icons.co_present_rounded, List<WaCallButton> buttons = const [], VoidCallback? onBack, bool pulse = true}) => WaCallView(
+        name: _roomTitle,
+        icon: icon,
+        status: status,
+        statusMaxLines: 3,
+        connected: false,
+        pulse: pulse,
+        onBack: onBack,
+        buttons: buttons,
       );
+
+  WaCallButton _leaveButton() => WaCallButton(icon: Icons.call_end_rounded, tooltip: _e.isCall ? 'End call' : 'Leave meeting', danger: true, onTap: _leaveFlow);
+
+  Widget? _recBanner() => _e.recBanner == null
+      ? null
+      : Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(color: const Color(0xFFB91C1C), borderRadius: BorderRadius.circular(20)),
+          child: Text(_e.recBanner!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, decoration: TextDecoration.none)),
+        );
+
+  WaCallButton _audioButton() => WaCallButton(icon: _e.audio.icon, tooltip: 'Audio output', active: _e.speaker, onTap: () => showCallAudioPicker(context, _e.audio, _e.selectAudioOutput));
+  WaCallButton _camButton() => WaCallButton(icon: _e.camOn && _e.hasVideoTrack ? Icons.videocam_rounded : Icons.videocam_off_rounded, tooltip: _e.camOn && _e.hasVideoTrack ? 'Turn camera off' : 'Turn camera on', active: !(_e.camOn && _e.hasVideoTrack), onTap: _e.toggleCam);
+  WaCallButton _micButton() => WaCallButton(icon: _e.micOn ? Icons.mic_rounded : Icons.mic_off_rounded, tooltip: _e.micOn ? 'Mute' : 'Unmute', active: !_e.micOn, onTap: _e.toggleMic);
+
+  /// Meetings use the same bar as calls; "More" holds people, chat, raise hand, recording and host controls.
+  List<WaCallButton> _meetingButtons() => [
+        _audioButton(),
+        _camButton(),
+        _micButton(),
+        WaCallButton(icon: Icons.more_horiz_rounded, tooltip: 'More', onTap: _showMoreMenu),
+        WaCallButton(icon: Icons.call_end_rounded, tooltip: 'Leave meeting', danger: true, onTap: _endPressed),
+      ];
 
   // ───────────── before joining ─────────────
   Widget _prejoin() {
-    final hasPreview = _e.hasVideoTrack && _prejoinCam;
-    return Column(children: [
-      Align(alignment: Alignment.centerLeft, child: IconButton(icon: const Icon(Icons.arrow_back_rounded, color: Colors.white), onPressed: _leaveFlow)),
-      Text(widget.title ?? 'Join meeting', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
-      const SizedBox(height: 14),
-      Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: Container(
-              color: const Color(0xFF22222C),
-              child: hasPreview
-                  ? RTCVideoView(_e.localRenderer, mirror: true, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
-                  : const Center(child: Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 56)),
-            ),
-          ),
+    final showCam = _e.hasVideoTrack && _prejoinCam;
+    return WaCallView(
+      name: _roomTitle,
+      icon: Icons.co_present_rounded,
+      status: _e.message ?? (showCam ? 'Ready to join?' : 'Your camera is off'),
+      statusMaxLines: 2,
+      video: showCam,
+      connected: false,
+      local: showCam ? RTCVideoView(_e.localRenderer, mirror: true, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover) : null,
+      onBack: _leaveFlow,
+      backIcon: Icons.arrow_back_rounded,
+      backTooltip: 'Back',
+      buttons: [
+        WaCallButton(icon: _prejoinMic ? Icons.mic_rounded : Icons.mic_off_rounded, tooltip: _prejoinMic ? 'Mute' : 'Unmute', active: !_prejoinMic, onTap: () => setState(() => _prejoinMic = !_prejoinMic)),
+        WaCallButton(icon: _prejoinCam ? Icons.videocam_rounded : Icons.videocam_off_rounded, tooltip: _prejoinCam ? 'Turn camera off' : 'Turn camera on', active: !_prejoinCam, onTap: () => setState(() => _prejoinCam = !_prejoinCam)),
+      ],
+      primary: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: IncomingCallPresentation.acceptColor, foregroundColor: Colors.white, minimumSize: const Size.fromHeight(52), shape: const StadiumBorder()),
+          icon: const Icon(Icons.videocam_rounded),
+          label: const Text('Join now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          onPressed: _started && _e.phase != 'idle'
+              ? null
+              : () {
+                  _started = true;
+                  _e.join(audio: _prejoinMic, video: _prejoinCam);
+                },
         ),
       ),
-      if (_e.message != null) Padding(padding: const EdgeInsets.fromLTRB(22, 8, 22, 0), child: Text(_e.message!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.amber, fontSize: 13))),
-      const SizedBox(height: 12),
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        _round(_prejoinMic ? Icons.mic_rounded : Icons.mic_off_rounded, () => setState(() => _prejoinMic = !_prejoinMic), off: !_prejoinMic, label: 'Mic'),
-        const SizedBox(width: 18),
-        _round(_prejoinCam ? Icons.videocam_rounded : Icons.videocam_off_rounded, () => setState(() => _prejoinCam = !_prejoinCam), off: !_prejoinCam, label: 'Camera'),
-      ]),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            icon: const Icon(Icons.login_rounded),
-            label: const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Join now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
-            onPressed: _started && _e.phase != 'idle' ? null : () {
-              _started = true;
-              _e.join(audio: _prejoinMic, video: _prejoinCam);
-            },
-          ),
-        ),
-      ),
-    ]);
+    );
   }
 
-  // ───────────── in the room ─────────────
-  Widget _room() {
+  // ───────────── one-to-one call: messaging-app style screen ─────────────
+  bool get _oneToOne => (widget.call || _e.isCall) && _e.meeting['kind'] != 'meeting' && _e.participants.length <= 2;
+  bool get _useWaCall => _oneToOne && (_e.phase == 'joining' || _e.phase == 'in' || _e.phase == 'ended');
+
+  /// In a meeting and nobody else is there yet: the "dialing" screen of a meeting (own camera, ripples, add people).
+  bool get _meetingAlone => !_oneToOne && _e.phase == 'in' && _e.participants.length <= 1;
+
+  String _callTime(DateTime since) {
+    final s = DateTime.now().difference(since).inSeconds.clamp(0, 359999);
+    final h = s ~/ 3600, m = (s % 3600) ~/ 60, x = s % 60;
+    final mm = m.toString().padLeft(2, '0'), xx = x.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$xx' : '$mm:$xx';
+  }
+
+  Widget _waCall() {
+    MJson? other;
+    for (final p in _e.participants) {
+      if (p['is_me'] != true) { other = p; break; }
+    }
+    final t = widget.title ?? '';
+    final name = (other?['name'] as String?)?.trim().isNotEmpty == true
+        ? other!['name'] as String
+        : (t.contains(' with ') ? t.substring(t.indexOf(' with ') + 6) : (RegExp(r'^(audio|video) call$', caseSensitive: false).hasMatch(t) ? '' : t));
+    final avatar = (other?['avatar_url'] as String?) ?? widget.peerAvatar;
+    final peer = other == null ? null : _e.peers[(other['pid'] as num).toInt()];
+    final remoteOn = other != null && other['video'] == true && (peer?.hasVideo ?? false) && (peer?.rendererReady ?? false);
+    final localOn = _e.camOn && _e.hasVideoTrack && _e.rendererReady;
+    final audioCall = widget.audioOnly || _e.meeting['audio_only'] == true;
+    final video = !audioCall || localOn || remoteOn;
+    final connected = _e.mediaConnected;
+    final since = _e.connectedAt;
+    final status = _e.phase == 'ended'
+        ? 'Call ended'
+        : (connected && since != null ? _callTime(since) : _e.callStatus);
+    return WaCallView(
+      name: name,
+      avatarUrl: avatar,
+      status: status,
+      video: video,
+      connected: connected,
+      remote: remoteOn ? RTCVideoView(peer!.renderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover) : null,
+      local: localOn ? RTCVideoView(_e.localRenderer, mirror: _e.frontCamera, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover) : null,
+      onBack: _minimize,
+      onMore: _showMoreMenu,
+      onAddPerson: _e.canInvite ? _addPeopleSheet : null,
+      banner: _recBanner(),
+      buttons: [
+        if (video && _e.hasVideoTrack) WaCallButton(icon: Icons.flip_camera_android_rounded, tooltip: 'Flip camera', onTap: _e.switchCamera),
+        _audioButton(),
+        _camButton(),
+        _micButton(),
+        WaCallButton(icon: Icons.call_end_rounded, tooltip: 'End call', danger: true, onTap: _endPressed),
+      ],
+    );
+  }
+
+  String get _timeNote {
+    final l = _leftSeconds;
+    if (l == null) return '';
+    return l > 0 ? '⏳ ${_fmt(l)} left' : 'Over time +${_fmt(l)}';
+  }
+
+  Widget _meetingAloneScreen() {
+    final localOn = _e.camOn && _e.hasVideoTrack && _e.rendererReady;
+    final note = _timeNote;
+    return WaCallView(
+      name: _roomTitle,
+      icon: Icons.co_present_rounded,
+      status: 'Waiting for others to join…${_e.locked ? '  ·  🔒' : ''}${note.isEmpty ? '' : '\n$note'}',
+      statusMaxLines: 2,
+      video: localOn,
+      connected: false,
+      local: localOn ? RTCVideoView(_e.localRenderer, mirror: _e.frontCamera, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover) : null,
+      onBack: _minimize,
+      onAddPerson: _e.canInvite ? _addPeopleSheet : null,
+      banner: _recBanner(),
+      buttons: _meetingButtons(),
+    );
+  }
+
+  // ───────────── in the room (two or more other people): participant grid with the call chrome ─────────────
+  Widget _meetingRoom() {
     final list = _e.participants;
+    final pad = MediaQuery.paddingOf(context);
     final modBanner = _e.isMod && _e.waiting.isNotEmpty;
-    return Stack(children: [
-      Positioned.fill(child: Padding(padding: EdgeInsets.fromLTRB(6, 56, 6, 96), child: _grid(list))),
-      // recording sign: shown whenever the server says a recording runs (the admin cannot hide it completely)
-      if (_e.recBanner != null)
+    final rec = _recBanner();
+    final left = _leftSeconds;
+    final status = _e.isCall ? _e.callProgress : '${list.length} in the ${_e.roomLabel}${_e.locked ? '  ·  🔒' : ''}';
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent, systemNavigationBarColor: WaCallView.panel),
+      child: Stack(fit: StackFit.expand, children: [
+        const Positioned.fill(child: WaCallBackdrop()),
+        Positioned.fill(child: Padding(padding: EdgeInsets.fromLTRB(6, pad.top + 60, 6, WaCallPanel.height + pad.bottom * .6 + 6), child: _grid(list))),
+        // recording sign: shown whenever the server says a recording runs (the admin cannot hide it completely)
+        if (rec != null) Positioned(top: pad.top + 58, left: 12, right: 12, child: Center(child: rec)),
+        // top bar (same as the call screens)
         Positioned(
-          top: 52, left: 12, right: 12,
-          child: Center(child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(color: const Color(0xFFB91C1C), borderRadius: BorderRadius.circular(20)),
-            child: Text(_e.recBanner!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, decoration: TextDecoration.none)),
-          )),
-        ),
-      // top bar
-      Positioned(
-        left: 0,
-        right: 0,
-        top: 0,
-        child: Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(children: [
-            IconButton(tooltip: 'Minimize', icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 30), onPressed: _minimize),
-            Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text((_e.meeting['kind'] == 'call' && widget.title != null && widget.title!.isNotEmpty) ? widget.title! : _e.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-              Row(children: [
-                if (_e.recRunning && _e.recUi['icon'] == true)
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                    decoration: BoxDecoration(color: const Color(0xFFDC2626), borderRadius: BorderRadius.circular(10)),
-                    child: Text('● REC ${_fmt(_e.recElapsed)}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-                  ),
-                Text(_e.isCall && _e.phase == 'in' ? _e.callProgress : _e.phase == 'joining' ? 'Connecting…' : _e.phase == 'ended' ? 'Disconnecting…' : '${list.length} in the ${_e.roomLabel}${_e.locked ? '  ·  🔒' : ''}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
-                if (_leftSeconds != null) Text('   ${_leftSeconds! > 0 ? '⏳ ${_fmt(_leftSeconds!)} left' : 'Over time +${_fmt(_leftSeconds!)}'}', style: TextStyle(color: _leftSeconds! <= 0 ? Colors.redAccent : (_leftSeconds! <= 300 ? Colors.amber : Colors.white60), fontSize: 12, fontWeight: FontWeight.w600)),
-              ]),
-            ])),
-            if (_e.canInvite) IconButton(tooltip: 'Add people', icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.white), onPressed: _addPeopleSheet),
-            if (_e.url.isNotEmpty)
-              IconButton(
-                tooltip: 'Share invitation',
-                icon: const Icon(Icons.ios_share_rounded, color: Colors.white),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _inviteText));
-                  toast(context, 'Invitation copied – paste it in any app to share');
-                },
-              ),
-          ]),
-        ),
-      ),
-      if (modBanner)
-        Positioned(
-          left: 12,
-          right: 12,
-          top: 56,
-          child: Material(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _participantsSheet,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Row(children: [
-                  const Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(_e.waiting.length == 1 ? '${_e.waiting.first['name']} wants to join' : '${_e.waiting.length} people want to join', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
-                  const Text('Review', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          left: 0,
+          right: 0,
+          top: 0,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(4, pad.top + 6, 4, 0),
+            child: Row(children: [
+              IconButton(tooltip: 'Minimize', onPressed: _minimize, icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 32)),
+              Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(_roomTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 19, height: 1.2)),
+                const SizedBox(height: 2),
+                Row(children: [
+                  if (_e.recRunning && _e.recUi['icon'] == true)
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                      decoration: BoxDecoration(color: const Color(0xFFDC2626), borderRadius: BorderRadius.circular(10)),
+                      child: Text('● REC ${_fmt(_e.recElapsed)}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                    ),
+                  Flexible(child: Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: .78), fontSize: 14))),
+                  if (left != null) Text('   $_timeNote', style: TextStyle(color: left <= 0 ? Colors.redAccent : (left <= 300 ? Colors.amber : Colors.white70), fontSize: 13, fontWeight: FontWeight.w600)),
                 ]),
+              ])),
+              if (_e.canInvite) IconButton(tooltip: 'Add people', onPressed: _addPeopleSheet, icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 24)),
+            ]),
+          ),
+        ),
+        if (modBanner)
+          Positioned(
+            left: 12,
+            right: 12,
+            top: pad.top + 58 + (rec != null ? 38 : 0),
+            child: Material(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _participantsSheet,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(children: [
+                    const Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(_e.waiting.length == 1 ? '${_e.waiting.first['name']} wants to join' : '${_e.waiting.length} people want to join', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                    const Text('Review', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  ]),
+                ),
               ),
             ),
           ),
-        ),
-      Positioned(left: 0, right: 0, bottom: 0, child: _controls()),
-    ]);
+        Positioned(left: 0, right: 0, bottom: 0, child: WaCallPanel(buttons: _meetingButtons())),
+      ]),
+    );
   }
 
   Widget _grid(List<MJson> list) {
@@ -396,7 +497,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(small ? 12 : 14),
       child: Container(
-        color: const Color(0xFF22222C),
+        color: WaCallView.panel,
         child: Stack(fit: StackFit.expand, children: [
           if (videoOn && renderer != null && (me ? _e.rendererReady : peer!.rendererReady)) RTCVideoView(renderer, mirror: me && _e.frontCamera, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover) else Center(child: Avatar('${p['name']}', url: p['avatar_url'] as String?, radius: small ? 24 : 40)),
           Positioned(
@@ -424,85 +525,54 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
     );
   }
 
-  Widget _round(IconData icon, VoidCallback onTap, {bool off = false, bool danger = false, String? label, int badge = 0, bool active = false}) {
-    final bg = danger ? AppColors.danger : (off ? Colors.white : (active ? AppColors.primary : const Color(0xFF2E2E3A)));
-    final fg = danger ? Colors.white : (off ? Colors.black87 : Colors.white);
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      Stack(clipBehavior: Clip.none, children: [
-        Material(
-          color: bg,
-          shape: const CircleBorder(),
-          child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: Padding(padding: const EdgeInsets.all(13), child: Icon(icon, color: fg, size: 24))),
-        ),
-        if (badge > 0)
-          Positioned(
-            right: -2,
-            top: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(10)),
-              child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-            ),
+  void _showMoreMenu() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(padding: EdgeInsets.all(16), child: Text('More options', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+          if (_e.hasVideoTrack)
+            ListTile(leading: const Icon(Icons.cameraswitch_rounded), title: const Text('Flip camera'), onTap: () { Navigator.pop(c); _e.switchCamera(); }),
+          ListTile(
+            leading: const Icon(Icons.people_alt_rounded),
+            title: const Text('People'),
+            trailing: _e.isMod && _e.waiting.isNotEmpty ? Chip(label: Text('${_e.waiting.length}'), backgroundColor: AppColors.danger, labelStyle: const TextStyle(color: Colors.white)) : null,
+            onTap: () { Navigator.pop(c); _participantsSheet(); },
           ),
-      ]),
-      if (label != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11))),
-    ]);
-  }
-
-  Widget _controls() {
-    final isCall = _e.meeting['kind'] == 'call';
-
-    void showMoreMenu() {
-      showModalBottomSheet(
-        context: context,
-        showDragHandle: true,
-        builder: (c) => SafeArea(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Padding(padding: EdgeInsets.all(16), child: Text('More options', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            if (_e.hasVideoTrack)
-              ListTile(leading: const Icon(Icons.cameraswitch_rounded), title: const Text('Flip camera'), onTap: () { Navigator.pop(c); _e.switchCamera(); }),
+          ListTile(
+            leading: const Icon(Icons.chat_bubble_rounded),
+            title: const Text('Chat'),
+            trailing: _e.unreadChat > 0 ? Chip(label: Text('${_e.unreadChat}'), backgroundColor: AppColors.primary, labelStyle: const TextStyle(color: Colors.white)) : null,
+            onTap: () { Navigator.pop(c); _chatSheet(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.back_hand_rounded),
+            title: Text(_e.hand ? 'Lower hand' : 'Raise hand'),
+            onTap: () { Navigator.pop(c); _e.toggleHand(); },
+          ),
+          if (_e.recCanStart || (_e.recSession != null && _e.recCanStop))
             ListTile(
-              leading: const Icon(Icons.people_alt_rounded),
-              title: const Text('People'),
-              trailing: _e.isMod && _e.waiting.isNotEmpty ? Chip(label: Text('${_e.waiting.length}'), backgroundColor: AppColors.danger, labelStyle: const TextStyle(color: Colors.white)) : null,
-              onTap: () { Navigator.pop(c); _participantsSheet(); },
+              leading: Icon(Icons.fiber_manual_record_rounded, color: _e.recSession != null ? AppColors.danger : null),
+              title: Text(_e.recSession == null ? (_e.recMode == 3 ? 'Ask to record' : _e.recMode == 5 ? 'Record (private)' : 'Record') : (_e.recSession!['status'] == 'pending' ? 'Cancel recording' : 'Stop recording')),
+              onTap: () { Navigator.pop(c); _e.recToggle(); },
             ),
+          if (_e.isMod)
+            ListTile(leading: const Icon(Icons.more_horiz_rounded), title: const Text('Host controls'), onTap: () { Navigator.pop(c); _hostSheet(); }),
+          if (_e.url.isNotEmpty)
             ListTile(
-              leading: const Icon(Icons.chat_bubble_rounded),
-              title: const Text('Chat'),
-              trailing: _e.unreadChat > 0 ? Chip(label: Text('${_e.unreadChat}'), backgroundColor: AppColors.primary, labelStyle: const TextStyle(color: Colors.white)) : null,
-              onTap: () { Navigator.pop(c); _chatSheet(); },
+              leading: const Icon(Icons.ios_share_rounded),
+              title: const Text('Share invitation'),
+              onTap: () {
+                Navigator.pop(c);
+                Clipboard.setData(ClipboardData(text: _inviteText));
+                toast(context, 'Invitation copied – paste it in any app to share');
+              },
             ),
-            ListTile(
-              leading: const Icon(Icons.back_hand_rounded),
-              title: Text(_e.hand ? 'Lower hand' : 'Raise hand'),
-              onTap: () { Navigator.pop(c); _e.toggleHand(); },
-            ),
-            if (_e.recCanStart || (_e.recSession != null && _e.recCanStop))
-              ListTile(
-                leading: Icon(Icons.fiber_manual_record_rounded, color: _e.recSession != null ? AppColors.danger : null),
-                title: Text(_e.recSession == null ? (_e.recMode == 3 ? 'Ask to record' : _e.recMode == 5 ? 'Record (private)' : 'Record') : (_e.recSession!['status'] == 'pending' ? 'Cancel recording' : 'Stop recording')),
-                onTap: () { Navigator.pop(c); _e.recToggle(); },
-              ),
-            if (_e.isMod)
-              ListTile(leading: const Icon(Icons.more_horiz_rounded), title: const Text('Host controls'), onTap: () { Navigator.pop(c); _hostSheet(); }),
-            ListTile(leading: const Icon(Icons.picture_in_picture_alt_rounded), title: const Text('Minimize'), onTap: () { Navigator.pop(c); _minimize(); }),
-            const SizedBox(height: 16),
-          ]),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xEE111118)])),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-        _round(_e.micOn ? Icons.mic_rounded : Icons.mic_off_rounded, _e.toggleMic, off: !_e.micOn, label: _e.micOn ? 'Mute' : 'Unmute'),
-        _round(_e.camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded, _e.toggleCam, off: !_e.camOn, label: _e.camOn ? 'Video' : 'Video off'),
-        _round(_e.audio.icon, () => showCallAudioPicker(context, _e.audio, _e.selectAudioOutput), active: _e.speaker, label: 'Audio'),
-        _round(Icons.more_horiz_rounded, showMoreMenu, label: 'More'),
-        _round(Icons.call_end_rounded, _endPressed, danger: true, label: isCall ? 'End' : 'Leave'),
-      ]),
+          ListTile(leading: const Icon(Icons.picture_in_picture_alt_rounded), title: const Text('Minimize'), onTap: () { Navigator.pop(c); _minimize(); }),
+          const SizedBox(height: 16),
+        ]),
+      ),
     );
   }
 
@@ -843,7 +913,11 @@ class _IncomingVideoCallPageState extends State<IncomingVideoCallPage> {
       await AndroidCallKit.answerInApp((widget.call['id'] as num).toInt());
       await Api.of(context).post('calls/${widget.call['id']}/answer');
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(fullscreenDialog: true, builder: (_) => MeetingRoomPage(code: '${widget.call['meeting']}', title: '${widget.call['audio_only'] == true ? 'Audio' : 'Video'} call with ${_peer['name'] ?? ''}', autoJoin: true, audioOnly: widget.call['audio_only'] == true)));
+      final peerName = '${_peer['name'] ?? ''}'.trim();
+      final title = IncomingCallPresentation.from(widget.call).meeting
+          ? (peerName.isEmpty ? 'Meeting' : 'Meeting with $peerName')
+          : '${widget.call['audio_only'] == true ? 'Audio' : 'Video'} call with $peerName';
+      Navigator.of(context).pushReplacement(MaterialPageRoute(fullscreenDialog: true, builder: (_) => MeetingRoomPage(code: '${widget.call['meeting']}', title: title, autoJoin: true, audioOnly: widget.call['audio_only'] == true, call: true, peerAvatar: _peer['avatar_url'] as String?, answered: true)));
     } catch (e) {
       await AndroidCallKit.endAll().catchError((_) {});
       await CallKitBridge.endAll();

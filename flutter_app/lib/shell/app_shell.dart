@@ -3,13 +3,13 @@ import '../core/conversation_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api.dart';
 import '../core/background_sync.dart';
 import '../core/mail_sync.dart';
 import '../core/device_contacts_sync.dart';
 import '../core/brand.dart';
 import '../core/calls.dart';
+import '../core/call_badge.dart';
 import '../core/config.dart';
 import '../core/friend_home_widget.dart';
 import '../core/menus.dart';
@@ -91,6 +91,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
       CallKitBridge.init();
       if (NotifyService.I.pendingCallAction == null && NotifyService.I.pendingNotification != null) _openNotifications();
       _pollUnread();
+      CallBadge.reset();
       _pollMissedCalls();
       MailSync.sync(context.read<Session>());
       _mailTimer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -100,6 +101,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
       _timer = Timer.periodic(const Duration(seconds: 60), (_) {
         if (!mounted || WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) return;
         _pollUnread();
+        _pollMissedCalls();
         Api.prefetch(context.read<Session>());
         DeviceContactsSync.I.sync();
         AppRefresh.bump();
@@ -129,6 +131,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
     if (s == AppLifecycleState.paused) _pausedAt = DateTime.now();
     if (s == AppLifecycleState.resumed && mounted) {
       context.read<Session>().refreshMe();
+      _pollMissedCalls();
       MailSync.sync(context.read<Session>());
       Api.reloadBackground().then((_) { if (mounted) AppRefresh.bump(); });
       DeviceContactsSync.I.restore(context.read<Session>()).then((_) => DeviceContactsSync.I.sync());
@@ -162,18 +165,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
     super.dispose();
   }
 
-  int _missedCalls = 0;
-
+  /// Unseen missed calls (badge on the Calls icon) – see [CallBadge].
   Future<void> _pollMissedCalls() async {
-    try {
-      final list = Api.list(await Api.of(context).getNoCache('calls/history'));
-      final prefs = await SharedPreferences.getInstance();
-      final viewed = prefs.getStringList('viewed_calls') ?? <String>[];
-      final unreadMissed = list.where((c) => c['outcome'] != 'answered' && c['outgoing'] != true && !viewed.contains('${c['id']}')).length;
-      if (mounted && unreadMissed != _missedCalls) {
-        setState(() => _missedCalls = unreadMissed);
-      }
-    } catch (_) {}
+    if (!mounted) return;
+    final session = context.read<Session>();
+    await CallBadge.refresh(Api(session), session.userId);
   }
 
   Future<void> _pollUnread() async {
@@ -267,6 +263,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
       _pages.clear();
       _history.clear();
       Api.clearCache();
+      CallBadge.reset();
+      _pollMissedCalls();
     }
     _wsKey = ws;
     _pages.putIfAbsent(_key, () => _dest.builder!(this));
@@ -435,28 +433,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver impleme
       title: Text(_headerTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: _isDetail || _headerTitle != Brand.name ? null : const TextStyle(fontFamily: 'Inter', fontSize: 22, fontWeight: FontWeight.w600)),
       actions: [
         IconButton(tooltip: 'Search', icon: const Icon(Icons.search_rounded), onPressed: () => showSearch(context: context, delegate: AppSearchDelegate())),
-        IconButton(
-          tooltip: _missedCalls > 0 ? 'Call history, $_missedCalls missed' : 'Call history',
-          onPressed: () async {
-            setState(() => _missedCalls = 0);
-            try {
-              final list = Api.list(await Api.of(context).getNoCache('calls/history'));
-              final prefs = await SharedPreferences.getInstance();
-              final viewed = prefs.getStringList('viewed_calls') ?? <String>[];
-              for (final c in list) {
-                if (c['id'] != null && !viewed.contains('${c['id']}')) {
-                  viewed.add('${c['id']}');
-                }
-              }
-              await prefs.setStringList('viewed_calls', viewed);
-            } catch (_) {}
-            await pushPage(context, const CallHistoryPage());
-            _pollMissedCalls();
-          },
-          icon: Badge(
-            isLabelVisible: _missedCalls > 0,
-            label: Text('$_missedCalls'),
-            child: const Icon(Icons.phone_in_talk_rounded),
+        ValueListenableBuilder<int>(
+          valueListenable: CallBadge.unseen,
+          builder: (c, n, _) => IconButton(
+            tooltip: n > 0 ? 'Calls, $n missed' : 'Calls',
+            onPressed: () async {
+              await pushPage(context, const CallHistoryPage());
+              _pollMissedCalls();
+            },
+            icon: Badge(
+              isLabelVisible: n > 0,
+              label: Text(n > 99 ? '99+' : '$n'),
+              child: const Icon(Icons.call_outlined),
+            ),
           ),
         ),
         IconButton(

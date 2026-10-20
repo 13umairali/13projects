@@ -211,7 +211,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(minimumSize: const Size(48, 44), shape: shape12, foregroundColor: onSurface, textStyle: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.w600)),
       ),
-      iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(minimumSize: const Size(44, 44))),
+      iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(minimumSize: const Size(44, 44), iconSize: 24)),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: brand,
         foregroundColor: AppColors.onAccent(brand),
@@ -263,6 +263,14 @@ class AppTheme {
         selectedColor: soft,
         labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w500, color: onSurface),
       ),
+      cardTheme: CardThemeData(
+        color: surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Rad.l), side: BorderSide(color: line)),
+      ),
+      iconTheme: IconThemeData(size: 24, color: onSurface),
       listTileTheme: ListTileThemeData(shape: shape12, minVerticalPadding: 6, iconColor: muted),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : (dark ? const Color(0xFFB8B7C9) : Colors.white)),
@@ -278,12 +286,19 @@ class AppTheme {
   }
 }
 
-/// Card surface: hairline border, no shadow (flat, modern). Works in light and dark.
-BoxDecoration cardDecoration(BuildContext c, {double radius = Rad.l}) {
+/// Card surface (modern SaaS): 14 px corners, hairline border and a very soft layered shadow in light mode
+/// (borders only in dark mode, where shadows disappear). Works in light and dark.
+BoxDecoration cardDecoration(BuildContext c, {double radius = 14}) {
   final dark = AppColors.isDark(c);
   return BoxDecoration(
     color: dark ? AppColors.surfaceDark : Colors.white,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: dark ? AppColors.borderDark : AppColors.border),
+    border: Border.all(color: dark ? AppColors.borderDark : AppColors.border.withValues(alpha: .8)),
+    boxShadow: dark
+        ? null
+        : const [
+            BoxShadow(color: Color(0x0A101828), blurRadius: 2, offset: Offset(0, 1)),
+            BoxShadow(color: Color(0x0D101828), blurRadius: 12, offset: Offset(0, 4)),
+          ],
   );
 }

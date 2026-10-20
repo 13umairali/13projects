@@ -44,8 +44,11 @@ void main() {
           final sender = find.descendant(of: tile, matching: find.text('Ali'));
           final avatar = find.descendant(of: tile, matching: find.byType(Avatar));
           final time = find.descendant(of: tile, matching: find.text('9h ago'));
-          expect(tester.getTopLeft(time).dy, lessThan(tester.getTopLeft(avatar).dy));
-          expect(tester.getTopRight(time).dx, closeTo(tester.getTopRight(avatar).dx, .1));
+          // Balanced: time is on the sender's line just left of the photo, and the icon, text block and photo
+          // all share the card's vertical centre.
+          expect(tester.getTopRight(time).dx, lessThan(tester.getTopLeft(avatar).dx));
+          expect((tester.getCenter(time).dy - tester.getCenter(sender).dy).abs(), lessThan(8));
+          expect((tester.getCenter(avatar).dy - tester.getCenter(tile).dy).abs(), lessThan(2));
           expect(tester.getCenter(avatar).dx, greaterThan(tester.getCenter(sender).dx));
           if (width == 390 && scale == 1) {
             expect(tester.getSize(tile).height, lessThan(90));
@@ -80,7 +83,7 @@ void main() {
     ))));
     expect(find.text('Alexandra Morgan'), findsOneWidget);
     expect(find.text('Full original content preview'), findsOneWidget);
-    expect(tester.widget<Avatar>(find.byType(Avatar)).radius, 18);
+    expect(tester.widget<Avatar>(find.byType(Avatar)).radius, 20);
     await tester.tap(find.text('Full original content preview'));
     expect(opened, isTrue);
   });

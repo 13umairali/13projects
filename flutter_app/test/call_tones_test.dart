@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:dahimail/core/call_tones.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -68,4 +70,26 @@ void main() {
     await tones.stop();
   });
 
+
+  test('online callee: ringback replaces the dial tone and never goes back', () async {
+    final tones = CallTones()..dialing();
+    await Future<void>.delayed(Duration.zero);
+    tones.ringing();
+    tones.dialing();
+    tones.ringing();
+    await Future<void>.delayed(Duration.zero);
+    expect(calls, ['dialing', 'ringback']);
+    tones.accepted();
+    tones.ringing();
+    await Future<void>.delayed(Duration.zero);
+    expect(calls, ['dialing', 'ringback', 'stop']);
+  });
+
+  test('calling, ringing and connected tones all exist and are different sounds', () {
+    final bytes = {for (final n in ['dialing', 'ringback', 'connected']) n: File('assets/sounds/$n.wav').readAsBytesSync()};
+    for (final b in bytes.values) { expect(b.length, greaterThan(1000)); }
+    expect(listEquals(bytes['dialing'], bytes['ringback']), isFalse);
+    expect(listEquals(bytes['dialing'], bytes['connected']), isFalse);
+    expect(listEquals(bytes['ringback'], bytes['connected']), isFalse);
+  });
 }
