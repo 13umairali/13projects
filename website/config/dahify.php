@@ -50,7 +50,7 @@ return [
             'abuse', 'admin', 'administrator', 'billing', 'contact', 'daemon',
             'dmarc', 'help', 'helpdesk', 'hostmaster', 'info', 'mailer-daemon',
             'marketing', 'no-reply', 'noreply', 'noc', 'postmaster', 'privacy',
-            'root', 'sales', 'security', 'staff', 'support', 'sysadmin',
+            'root', 'sales', 'security', 'staff', 'sysadmin',
             'system', 'team', 'webmaster', 'www', 'dahify', 'dahimail',
             'official', 'moderator', 'legal', 'ssl-admin', 'mail', 'ftp', 'test',
         ],
