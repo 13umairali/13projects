@@ -739,7 +739,7 @@ class MeetingEngine extends ChangeNotifier {
         }
       };
       // Watchdog: still not connected after 10 s on the normal route -> retry through the TURN relay only.
-      p.connectTimer = Timer(const Duration(seconds: 10), () => unawaited(_relayFallback(p)));
+      p.connectTimer = Timer(const Duration(seconds: 5), () => unawaited(_relayFallback(p)));
       return p;
     } catch (_) {
       if (peers[id] == p) await _dropPeer(id);

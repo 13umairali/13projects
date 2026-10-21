@@ -69,8 +69,14 @@ class FriendSettings
 
     /**
      * Short-lived Cloudflare TURN credentials. The TURN key itself cannot be used as a username/password, so the server
-     * asks Cloudflare for credentials (valid 24 h) and caches them for 1 h. The cache means a call never waits for
+     * asks Cloudflare for credentials (valid 24 h) and caches them for 18 h, so a call almost never waits for
      * Cloudflare. Returns [] when Cloudflare is not configured or the request fails (callers then use the old STUN setup).
+     *
+     * Only three addresses are handed to the clients on purpose: every extra address that a network blocks has to time
+     * out before ICE gives up on it, which made the connection slow.
+     *   - stun:...:3478                  finds the public address (fast, UDP)
+     *   - turn:...:3478?transport=udp    relay over UDP (fast)
+     *   - turns:...:443?transport=tcp    relay over TLS on 443: passes strict firewalls and mobile carriers
      */
     private static function cloudflareIce(): array
     {
@@ -95,13 +101,32 @@ class FriendSettings
             if (!is_array($ice) || !$ice) { Cache::put('cf_turn_down', 1, 60); return []; }
             if (isset($ice['urls'])) $ice = [$ice];   // the API returns one object; WebRTC wants a list
 
-            foreach ($ice as &$s) {                   // port 53 is blocked by Chrome and only slows ICE down
-                $s['urls'] = array_values(array_filter((array) $s['urls'], fn ($u) => !str_contains($u, ':53')));
+            // find the entry that carries the username / credential
+            $username = null; $credential = null;
+            foreach ($ice as $entry) {
+                if (!empty($entry['username']) && !empty($entry['credential'])) {
+                    $username = $entry['username'];
+                    $credential = $entry['credential'];
+                    break;
+                }
             }
-            unset($s);
+            if (!$username || !$credential) {
+                Log::warning('Cloudflare TURN response had no username/credential');
+                Cache::put('cf_turn_down', 1, 60);
+                return [];
+            }
 
-            Cache::put('cf_turn_ice', $ice, 3600);    // credentials live 24 h, so a 1 h cache always leaves plenty of time
-            return $ice;
+            $servers = [
+                ['urls' => ['stun:stun.cloudflare.com:3478']],
+                [
+                    'urls' => ['turn:turn.cloudflare.com:3478?transport=udp', 'turns:turn.cloudflare.com:443?transport=tcp'],
+                    'username' => $username,
+                    'credential' => $credential,
+                ],
+            ];
+
+            Cache::put('cf_turn_ice', $servers, 64800);   // credentials live 24 h; 18 h in the cache always leaves 6 h of validity
+            return $servers;
         } catch (\Throwable $e) {
             Log::warning('Cloudflare TURN credentials unavailable', ['error' => $e->getMessage()]);
             Cache::put('cf_turn_down', 1, 60);
