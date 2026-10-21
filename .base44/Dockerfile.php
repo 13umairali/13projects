@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libzip-dev libicu-dev libc-client2007e-dev libkrb5-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
-    && docker-php-ext-install -j"$(nproc)" bcmath exif gd intl imap pdo_mysql zip \
+    && docker-php-ext-install -j"$(nproc)" bcmath exif gd intl imap pcntl pdo_mysql zip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

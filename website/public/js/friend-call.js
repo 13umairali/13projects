@@ -304,9 +304,15 @@
     return Promise.resolve();
   }
   function loop() {
-    clearInterval(S.sig);
-    S.sig = setInterval(pullSignals, 1000);
+    clearTimeout(S.sig);
+    tickSignals();
+  }
+  // Fast hops (400 ms) until the call is actually connected, then the calm 1 s rhythm —
+  // the websocket, when connected, wakes pullSignals() the moment a signal arrives.
+  function tickSignals() {
+    if (!S.call) return;
     pullSignals();
+    S.sig = setTimeout(tickSignals, S.clock ? 1000 : 400);
   }
   function pullSignals() {
       if (!S.call || S.pulling) return; S.pulling = true; var id = S.call.id;
@@ -324,7 +330,7 @@
     if (tones) tones.stop();
     if (audio) { audio.pause(); audio.srcObject = null; }
     if (enableAudio) enableAudio.style.display = 'none';
-    clearInterval(S.sig); clearInterval(S.clock); stopRing(); S.clock = null;
+    clearTimeout(S.sig); clearInterval(S.clock); stopRing(); S.clock = null;
     if (S.pc) { try { S.pc.close(); } catch (e) {} }
     if (S.stream) S.stream.getTracks().forEach(function (t) { t.stop(); });
     var name = S.call ? S.call.peer.name : (S.incoming ? S.incoming.peer.name : '');

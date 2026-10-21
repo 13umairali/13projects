@@ -8,11 +8,7 @@
     @auth
     <meta name="dahi-realtime" content="{{ json_encode([
         'user' => auth()->id(), 'workspace' => auth()->user()->active_workspace_id,
-        'key' => config('broadcasting.default') === 'pusher' ? config('broadcasting.connections.pusher.key') : null,
-        'cluster' => config('broadcasting.connections.pusher.options.cluster', 'mt1'),
-        'host' => config('services.realtime.ws_host'), 'port' => config('services.realtime.ws_port', 443),
-        'tls' => config('services.realtime.ws_scheme', 'https') === 'https', 'auth' => url('/broadcasting/auth'),
-    ]) }}">
+    ] + \App\Support\ClientRealtime::client()) }}">
     @endauth
     @php
         // Polling in meeting.js remains available during an incomplete asset deployment.

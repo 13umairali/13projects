@@ -286,7 +286,7 @@
     if (tones) tones.stop();
     if (finishing) return finishing;
     finishing = window.DahiRec ? window.DahiRec.stop() : Promise.resolve();
-    clearInterval(S.poller); clearInterval(S.clock); clearInterval(S.levelTimer);
+    clearTimeout(S.poller); clearInterval(S.clock); clearInterval(S.levelTimer);
     Object.keys(S.peers).forEach(function (k) { closePeer(+k); });
     if (S.screenTrack) try { S.screenTrack.stop(); } catch (e) {}
     S.sharing = false; S.status = 'idle';
@@ -334,7 +334,18 @@
       if (d.me && d.me.status === 'ended') showEnd('Call ended', false);
     }).catch(noop).then(function () { statusBusy = false; });
   }
-  function startPolling() { clearInterval(S.poller); S.poller = setInterval(poll, 1000); poll(); }
+  // Adaptive signalling: while the WebRTC connection is still being set up (offer / answer / ICE
+  // candidates) poll every 400 ms so nothing waits a full second per hop; once at least one
+  // peer's media is flowing, relax to 1.5 s (the websocket, when connected, pushes signals and
+  // roster changes instantly anyway — this poll is then only a safety net).
+  function mediaFlows() {
+    return Object.keys(S.peers).some(function (k) { var p = S.peers[k]; return p && p.pc && p.pc.connectionState === 'connected'; });
+  }
+  function startPolling() { clearTimeout(S.poller); tickPoll(); }
+  function tickPoll() {
+    poll();
+    if (!finishing && S.pid) S.poller = setTimeout(tickPoll, mediaFlows() ? 1500 : 400);
+  }
   function poll() {
     if (finishing || !S.pid) return;
     if (S.busy) { pollAgain = true; return; } S.busy = true;

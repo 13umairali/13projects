@@ -35,7 +35,6 @@ x-app-environment: &app-environment
   CACHE_STORE: database
   QUEUE_CONNECTION: database
   MAIL_MAILER: log                     # outbound mail is written to storage/logs, nothing is sent
-  BROADCAST_CONNECTION: log
   FILESYSTEM_DISK: local
   # ── seeded dev logins (AdminSeeder / DemoUserSeeder) ─────────────────
   ADMIN_EMAIL: admin@mailtrixy.com
@@ -45,6 +44,23 @@ x-app-environment: &app-environment
   # Laravel's artisan serve runs PHP's built-in server: give it a few workers
   # so page assets are not fetched serially.
   PHP_CLI_SERVER_WORKERS: "4"
+  # ── self-hosted websockets (laravel/reverb, Pusher protocol) ─────────────
+  # Call / meeting signals (offer / answer / ICE) are pushed to the other
+  # device the instant they are sent, instead of waiting for the next poll —
+  # this is what makes call & meeting pickup feel instant. The `reverb`
+  # service runs the websocket server; these values address it.
+  BROADCAST_CONNECTION: reverb
+  REVERB_APP_ID: "1"
+  REVERB_APP_KEY: dahimail-realtime
+  REVERB_APP_SECRET: b4635dadd96e4163d5b0c2d0d437f742ba7aeaa3717b5cae
+  REVERB_HOST: reverb
+  REVERB_PORT: "8080"
+  REVERB_SCHEME: http
+  # what browsers / the mobile app dial (wss through the sandbox HTTPS proxy;
+  # in production set these to your own wss:// host)
+  PUSHER_WS_HOST: 8080-${BASE44_PUBLIC_HOST_SUFFIX}
+  PUSHER_WS_PORT: "443"
+  PUSHER_WS_SCHEME: https
   # Provided by the Base44 sandbox. Read (never hardcoded) by
   # AppServiceProvider to force https on generated URLs, because the preview
   # is served through an HTTPS reverse proxy that Laravel cannot detect.
@@ -240,6 +256,29 @@ services:
       base44.kind: web
       base44.port: "3000"
       base44.docs: /docs/api
+
+  # Websocket server (laravel/reverb) — the instant signalling channel for
+  # calls and meetings. Browsers connect via wss://<PUSHER_WS_HOST>/app/<key>;
+  # the app publishes events to it over the docker network (REVERB_HOST).
+  reverb:
+    <<: *php-service
+    restart: on-failure
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@fsockopen(\"127.0.0.1\", 8080, $$e, $$n, 3) ? 0 : 1);' || { echo 'reverb: websocket server not accepting connections'; exit 1; }"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      base44.project: "Realtime websockets (Reverb)"
+      base44.kind: api
+      base44.port: "8080"
 
   worker:
     <<: *php-service

@@ -258,6 +258,13 @@
       if (S.connectedAt && !others().length) { if (!S.lostAt) S.lostAt = Date.now(); else if (Date.now() - S.lostAt > 25000) hangUp('Call ended'); }
     }, 1000);
   }
+  // Adaptive signalling: 400 ms hops while the offer / answer / ICE exchange is running, so the
+  // call connects as fast as it can; 1.5 s once the media flows (the websocket, when connected,
+  // pushes every signal the instant it is sent — this poll is then only a safety net).
+  function tick() {
+    poll();
+    if (!S.ending && S.pid) S.poller = setTimeout(tick, S.mediaUp ? 1500 : 400);
+  }
   function poll() {
     if (S.ending || !S.pid) return;
     if (S.busy) { S.again = true; return; } S.busy = true;
@@ -325,7 +332,7 @@
   function finish(text, pending) {
     if (S.ending) return;
     S.ending = true; S.endText = text;
-    clearInterval(S.poller); clearInterval(S.clock); clearInterval(S.ringWatch); ringStop();
+    clearTimeout(S.poller); clearInterval(S.clock); clearInterval(S.ringWatch); ringStop();
     Object.keys(S.peers).forEach(function (k) { closePeer(+k); });
     releaseMedia();
     root.classList.add('ended'); root.classList.remove('ringing');
@@ -358,7 +365,7 @@
       if (r._status === 429 && (attempt || 0) < 6) return new Promise(function (ok) { setTimeout(ok, 1200 + 600 * (attempt || 0)); }).then(function () { return join((attempt || 0) + 1); });
       if (r._status >= 400 || !r.data) { finish(/ended|not exist/i.test(r.message || '') ? 'Call ended' : (r.message || 'Could not connect the call.')); return; }
       S.pid = r.data.pid; S.ice = r.data.ice_servers || [];
-      S.poller = setInterval(poll, 1000); poll();
+      tick();
       if (ROLE === 'caller') { ringStart(); watchRing(); } else watchRing();
       paint();
     }).catch(function () {

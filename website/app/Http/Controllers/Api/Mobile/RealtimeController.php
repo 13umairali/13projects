@@ -2,19 +2,22 @@
 namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
+use App\Support\ClientRealtime;
 use Illuminate\Http\Request;
 
 class RealtimeController extends Controller
 {
     public function config(Request $request)
     {
-        $key = config('broadcasting.connections.pusher.key');
+        // pusher.com or a self-hosted Reverb server — both speak the Pusher protocol,
+        // so the app only needs to know which host to open a websocket to.
+        $c = ClientRealtime::client();
         return response()->json([
-            'enabled' => config('broadcasting.default') === 'pusher' && !empty($key),
-            'key' => $key,
-            'host' => config('services.realtime.ws_host') ?: 'ws-'.config('broadcasting.connections.pusher.options.cluster', 'mt1').'.pusher.com',
-            'port' => (int) config('services.realtime.ws_port', 443),
-            'tls' => config('services.realtime.ws_scheme', 'https') === 'https',
+            'enabled' => $c['enabled'],
+            'key' => $c['key'],
+            'host' => $c['host'] ?: 'ws-'.config('broadcasting.connections.pusher.options.cluster', 'mt1').'.pusher.com',
+            'port' => $c['port'],
+            'tls' => $c['tls'],
             'channel' => 'private-user.'.$request->user()->id,
         ])->header('Cache-Control', 'no-store');
     }
@@ -23,9 +26,7 @@ class RealtimeController extends Controller
     {
         $data = $request->validate(['socket_id' => ['required', 'string', 'max:100', 'regex:/^\d+\.\d+$/'], 'channel_name' => ['required', 'string', 'max:100']]);
         abort_unless($data['channel_name'] === 'private-user.'.$request->user()->id, 403);
-        $key = config('broadcasting.connections.pusher.key');
-        $secret = config('broadcasting.connections.pusher.secret');
-        abort_unless(config('broadcasting.default') === 'pusher' && $key && $secret, 503);
-        return response()->json(['auth' => $key.':'.hash_hmac('sha256', $data['socket_id'].':'.$data['channel_name'], $secret)])->header('Cache-Control', 'no-store');
+        abort_unless(ClientRealtime::enabled() && ClientRealtime::secret() !== '', 503);
+        return response()->json(['auth' => ClientRealtime::key().':'.hash_hmac('sha256', $data['socket_id'].':'.$data['channel_name'], ClientRealtime::secret())])->header('Cache-Control', 'no-store');
     }
 }
