@@ -910,14 +910,16 @@ class _IncomingVideoCallPageState extends State<IncomingVideoCallPage> {
     setState(() => _busy = true);
     CallManager.I.ringStop();
     try {
-      await AndroidCallKit.answerInApp((widget.call['id'] as num).toInt());
-      await Api.of(context).post('calls/${widget.call['id']}/answer');
+      final callId = (widget.call['id'] as num).toInt();
+      // Open the call screen at once. The answer request runs inside the room, in parallel with the microphone and the join.
+      // (remembering the choice first, but never waiting more than 300 ms for it)
+      await AndroidCallKit.answerInApp(callId).timeout(const Duration(milliseconds: 300)).catchError((_) {});
       if (!mounted) return;
       final peerName = '${_peer['name'] ?? ''}'.trim();
       final title = IncomingCallPresentation.from(widget.call).meeting
           ? (peerName.isEmpty ? 'Meeting' : 'Meeting with $peerName')
           : '${widget.call['audio_only'] == true ? 'Audio' : 'Video'} call with $peerName';
-      Navigator.of(context).pushReplacement(MaterialPageRoute(fullscreenDialog: true, builder: (_) => MeetingRoomPage(code: '${widget.call['meeting']}', title: title, autoJoin: true, audioOnly: widget.call['audio_only'] == true, call: true, peerAvatar: _peer['avatar_url'] as String?, answered: true)));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(fullscreenDialog: true, builder: (_) => MeetingRoomPage(code: '${widget.call['meeting']}', title: title, autoJoin: true, audioOnly: widget.call['audio_only'] == true, call: true, peerAvatar: _peer['avatar_url'] as String?, answered: true, answerCallId: callId)));
     } catch (e) {
       await AndroidCallKit.endAll().catchError((_) {});
       await CallKitBridge.endAll();

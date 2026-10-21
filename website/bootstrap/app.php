@@ -56,6 +56,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('api', [
             \App\Http\Middleware\EnsureIpNotBlocked::class,
             \App\Http\Middleware\SyncDeviceTimezone::class,   // account timezone + IP follow this phone (X-Timezone header)
+            \App\Http\Middleware\LogSlowRequests::class,       // Server-Timing header + log of slow API requests
         ]);
 
         // Installer guard — MUST run before session starts so it can

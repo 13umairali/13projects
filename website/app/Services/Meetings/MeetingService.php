@@ -248,7 +248,19 @@ class MeetingService
         return [true, $lobby ? 'Waiting for the host to let you in.' : 'Joined.', [
             'pid' => $pid, 'token' => $token, 'status' => $lobby ? 'waiting' : 'joined', 'role' => $isHost ? 'host' : ($inherit ?? 'participant'), 'name' => $user?->name ?? $guestName,
             'meeting' => $this->info($m), 'ice_servers' => FriendSettings::iceServers(), 'max' => $this->max(),
+            'participants' => $lobby ? [] : $this->roster($m, (int) $pid),   // lets the app start connecting without one more poll
         ]];
+    }
+
+    /** the people in the room right now, in the same shape as poll() */
+    private function roster(object $m, int $selfPid): array
+    {
+        return DB::table('meeting_participants as p')->leftJoin('users as u', 'u.id', '=', 'p.user_id')->where('p.meeting_id', $m->id)->where('p.status', 'joined')->orderBy('p.id')
+            ->get(['p.id', 'p.name', 'p.role', 'p.audio_on', 'p.video_on', 'p.hand', 'p.sharing', 'p.user_id', 'u.avatar_path'])
+            ->map(fn ($r) => [
+                'pid' => (int) $r->id, 'name' => $r->name, 'role' => $r->role, 'audio' => (bool) $r->audio_on, 'video' => (bool) $r->video_on, 'hand' => (bool) $r->hand, 'sharing' => (bool) $r->sharing,
+                'avatar_url' => $r->avatar_path ? asset('storage/' . $r->avatar_path) : null, 'is_me' => (int) $r->id === $selfPid,
+            ])->all();
     }
 
     public function addInvitee(int $meetingId, int $userId): void { DB::table('meeting_invitees')->insertOrIgnore(['meeting_id' => $meetingId, 'user_id' => $userId]); }

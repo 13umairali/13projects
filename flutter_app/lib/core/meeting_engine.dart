@@ -460,23 +460,16 @@ class MeetingEngine extends ChangeNotifier {
     message = null;
     notifyListeners();
     _realtime ??= Realtime.I.events.listen(_live);
-    // Answering a call: open the microphone WHILE the server confirms the answer (they used to run one after the other).
+    // Answering a call: the answer request, the microphone and the room join all run AT THE SAME TIME
+    // (before: answer, then microphone, then join, one after the other = seconds of "Please wait…").
     final earlyPreview = answerCallId != null ? startPreview(wantVideo: video) : null;
     if (answerCallId != null) {
       _accepted = true;
       _tones.accepted();
-      try {
-        await api.post('calls/$answerCallId/answer');
-        _t('answer confirmed by server');
-        if (_closed) { await api.post('calls/$answerCallId/end'); return; }
-      } catch (e) {
-        if (_closed) return;
-        phase = 'error';
-        message = e is ApiException ? e.message : 'Could not answer the call.';
-        await _release();
-        notifyListeners();
-        return;
-      }
+      unawaited(api.post('calls/$answerCallId/answer').then<void>((_) { _t('answer confirmed by server'); }).catchError((Object e) {
+        // cancelled / answered on another phone meanwhile: close the room again
+        if (!_closed) unawaited(_end(e is ApiException ? e.message : 'Could not answer the call.'));
+      }));
     }
     if (!await (earlyPreview ?? startPreview(wantVideo: video))) {
       if (_local == null) {
@@ -496,6 +489,7 @@ class MeetingEngine extends ChangeNotifier {
       final d = Api.obj(raw);
       if (_closed) {
         await api.post('meetings/$code/leave', {'pid': d['pid']});
+        if (answerCallId != null) unawaited(api.post('calls/$answerCallId/end').catchError((_) {}));
         return;
       }
       _t('join confirmed by server');
@@ -520,6 +514,11 @@ class MeetingEngine extends ChangeNotifier {
       }
       _fastUntil = DateTime.now().add(const Duration(seconds: 25));
       _scheduleLoop();
+      // The join answer already lists who is in the room: start the connection NOW instead of after one more poll.
+      if (phase == 'in' && d['participants'] is List) {
+        participants = (d['participants'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        unawaited(_syncPeers());
+      }
       _poll();
     } on ApiException catch (e) {
       phase = 'error';
@@ -738,8 +737,10 @@ class MeetingEngine extends ChangeNotifier {
           unawaited(_recoverPeer(p));
         }
       };
-      // Watchdog: still not connected after 10 s on the normal route -> retry through the TURN relay only.
-      p.connectTimer = Timer(const Duration(seconds: 5), () => unawaited(_relayFallback(p)));
+      // No "retry through the relay" timer here any more: with the TURN servers already in the configuration, relay
+      // candidates are tried in parallel with the direct ones, so a timer could only break a connection that was
+      // just about to succeed (it did: it closed a working call and restarted everything, ~4 s lost).
+      // Relay-only is still used after two failed ICE restarts (see _recoverPeer).
       return p;
     } catch (_) {
       if (peers[id] == p) await _dropPeer(id);
