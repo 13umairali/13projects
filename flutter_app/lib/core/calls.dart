@@ -478,7 +478,13 @@ class CallManager with WidgetsBindingObserver {
     NotifyService.I.onCallAction = _onNotifAction;
     if (_poll != null) return;
     WidgetsBinding.instance.addObserver(this);
-    _poll = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    // While a call / meeting is open the room has its own poll and the realtime socket reports new calls and hang-ups,
+    // so this general poll slows to every 5 s (events still trigger it at once through _tick()).
+    _poll = Timer.periodic(const Duration(seconds: 1), (_) {
+      final inCall = inRoom || active != null || RoomHost.I.engine != null;
+      if (inCall && DateTime.now().difference(_lastTickAt) < const Duration(seconds: 5)) return;
+      _tick();
+    });
     Future.microtask(_tick); // a call that is already ringing shows at once (e.g. opened from the notification)
   }
 
@@ -633,10 +639,12 @@ class CallManager with WidgetsBindingObserver {
   /// true while a device in the call (possibly the friend's browser) is recording it – shown as a red notice in the call screen.
   final ValueNotifier<bool> recordingActive = ValueNotifier(false);
 
+  DateTime _lastTickAt = DateTime.fromMillisecondsSinceEpoch(0);
   Future<void> _tick() async {
     final s = _session;
     if (_busy || s == null || !s.isLoggedIn) return;
     _busy = true;
+    _lastTickAt = DateTime.now();
     try {
       final readRevision = _readRevision;
       final callRevision = _callRevision;

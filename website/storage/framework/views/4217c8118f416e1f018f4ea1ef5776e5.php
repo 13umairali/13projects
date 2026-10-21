@@ -1313,8 +1313,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         <script>window.DAHI_PUSH = <?php echo json_encode(['vapid' => $__fcm['web_vapid_key'], 'config' => $__fcm['web_config']], 512) ?>;</script>
         <script src="<?php echo e(asset('js/dahi-push.js')); ?>?v=20261007" defer></script>
     <?php endif; ?><?php if(\Livewire\Mechanisms\ExtendBlade\ExtendBlade::isRenderingLivewireComponent()): ?><!--[if ENDBLOCK]><![endif]--><?php endif; ?>
-    <script src="<?php echo e(asset('js/call-tones.js')); ?>?v=20261014" defer></script>
-    <script src="<?php echo e(asset('js/friend-call.js')); ?>?v=20261014-media" defer></script>
+    <script src="<?php echo e(asset('js/call-tones.js')); ?>?v=20261021-sounds" defer></script>
+    <script src="<?php echo e(asset('js/friend-call.js')); ?>?v=20261021-saas" defer></script>
 <?php endif; ?><?php if(\Livewire\Mechanisms\ExtendBlade\ExtendBlade::isRenderingLivewireComponent()): ?><!--[if ENDBLOCK]><![endif]--><?php endif; ?>
     <?php echo $__env->make('partials.timezone-sync', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 </body>

@@ -1,80 +1,117 @@
-/* Call progress sounds. Resume from a gesture when browser autoplay is blocked. */
+/* Call progress sounds for the website: the same three sounds and the same rules as the phone app
+ * (flutter_app/lib/core/call_tones.dart, docs/call-meeting-tones.md).
+ *
+ *   caller:  dialing()  "Calling…"   soft double blip, repeats       (/sounds/dialing.wav)
+ *            ringing()  "Ringing…"   classic ringback, 2 s on / 4 s off (/sounds/ringback.wav)
+ *            accepted() they picked up: silence until the media is up
+ *            connected() media is up: one short confirmation          (/sounds/connected.wav)
+ *   callee:  ringtone() incoming call: the ringtone, repeats           (/sounds/ringtone.wav)
+ *   both:    stop()     hang-up / decline / missed: everything stops
+ *
+ * Rules: dialing never replaces ringback; once accepted (or connected) neither can restart; after stop() the
+ * object can be used for the next call. Browsers may block autoplay: the sound then starts on the next click,
+ * key press or touch, and a call that has already ended never makes a late sound. */
 (function () {
+  var FILES = { dialing: 'dialing.wav', ringback: 'ringback.wav', ringtone: 'ringtone.wav', connected: 'connected.wav' };
+  var GESTURES = ['click', 'keydown', 'touchstart'];
+
   function CallTones() {
-    this.context = null; this.nodes = []; this.timer = null;
-    this.isConnected = false; this.pendingConnected = false; this.listening = false;
+    this.base = window.DahiSoundBase || '/sounds/';
+    this.mode = '';            // '' | dialing | ringback | ringtone
+    this.isAccepted = false;
+    this.isConnected = false;
+    this.loop = null;          // the looping <audio> (dialing / ringback / ringtone)
+    this.chimeWanted = false;  // the connected sound is waiting for a gesture
+    this.token = 0;            // bumped by stop(): late promises of an earlier call do nothing
+    this.listening = false;
     this.unlock = this.resume.bind(this);
   }
+
   CallTones.prototype.listen = function () {
     if (this.listening) return;
     this.listening = true;
-    ['click', 'keydown', 'touchstart'].forEach(function (event) {
-      document.addEventListener(event, this.unlock, true);
-    }, this);
+    GESTURES.forEach(function (name) { document.addEventListener(name, this.unlock, true); }, this);
   };
-  CallTones.prototype.resume = function () {
-    try {
-      var C = window.AudioContext || window.webkitAudioContext;
-      if (!C) return;
-      this.context = this.context || new C();
-      var context = this.context;
-      var ready = context.state === 'running' ? Promise.resolve() : context.resume();
-      ready.then(function () {
-        if (this.context !== context || !this.listening) return;
-        if (this.pendingConnected) this.chime();
-        else if (this.timer && !this.nodes.length) this.ring();
-      }.bind(this)).catch(function () {});
-    } catch (e) {}
+  CallTones.prototype.unlisten = function () {
+    if (!this.listening) return;
+    this.listening = false;
+    GESTURES.forEach(function (name) { document.removeEventListener(name, this.unlock, true); }, this);
   };
-  CallTones.prototype.note = function (frequency, delay, duration) {
-    var a = this.context;
-    if (!a || a.state !== 'running') return;
-    var oscillator = a.createOscillator(), gain = a.createGain(), t = a.currentTime + delay;
-    oscillator.frequency.value = frequency; oscillator.connect(gain); gain.connect(a.destination);
-    gain.gain.setValueAtTime(0, t); gain.gain.linearRampToValueAtTime(0.055, t + 0.025);
-    gain.gain.setValueAtTime(0.055, t + duration - 0.025); gain.gain.linearRampToValueAtTime(0, t + duration);
-    this.nodes.push(oscillator);
-    oscillator.onended = function () {
-      oscillator.disconnect(); gain.disconnect();
-      this.nodes = this.nodes.filter(function (node) { return node !== oscillator; });
-    }.bind(this);
-    oscillator.start(t); oscillator.stop(t + duration);
+
+  /** Plays one file. Resolves true when it is playing, false when the browser wants a gesture first. */
+  CallTones.prototype.play = function (name, loop) {
+    var token = this.token, audio = new Audio(this.base + FILES[name]);
+    audio.loop = !!loop; audio.preload = 'auto';
+    var attempt; try { attempt = audio.play(); } catch (e) { attempt = Promise.reject(e); }   // called synchronously: keeps the user gesture, and stop() right after still wins
+    var done = Promise.resolve(attempt).then(function () { return true; }, function () { return false; });
+    return { audio: audio, ready: done.then(function (ok) { return this.token === token ? ok : (this.release(audio), true); }.bind(this)) };
   };
-  CallTones.prototype.ring = function () {
-    if (this.isConnected) return;
-    this.note(440, 0, 1.2); this.note(480, 0, 1.2);
-  };
-  CallTones.prototype.dialing = function () {
-    if (this.timer || this.isConnected) return;
-    this.listen();
-    this.timer = setInterval(this.ring.bind(this), 3200);
-    this.resume();
+  CallTones.prototype.release = function (audio) {
+    try { audio.pause(); audio.removeAttribute && audio.removeAttribute('src'); audio.src = ''; } catch (e) {}
   };
   CallTones.prototype.clear = function () {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-    this.nodes.splice(0).forEach(function (node) { try { node.stop(); } catch (e) {} });
+    var audio = this.loop; this.loop = null;
+    if (audio) this.release(audio);
   };
-  CallTones.prototype.chime = function () {
-    if (!this.context || this.context.state !== 'running') return;
-    this.pendingConnected = false;
-    this.note(660, 0, 0.16); this.note(880, 0.21, 0.19);
+
+  CallTones.prototype.start = function (mode) {
+    this.clear(); this.mode = mode;
+    var token = this.token, started = this.play(mode, true);
+    this.loop = started.audio;
+    started.ready.then(function (ok) { if (!ok && this.token === token && this.mode === mode) this.listen(); }.bind(this));
   };
-  CallTones.prototype.accepted = function () { this.clear(); };
+
+  /** Other person not connected yet: "Calling…" dial tone. */
+  CallTones.prototype.dialing = function () {
+    if (this.isConnected || this.isAccepted || this.mode === 'ringback' || this.mode === 'dialing') return;
+    this.start('dialing');
+  };
+  /** Other person's device is ringing: "Ringing…" ringback (switches over from the dial tone, never back). */
+  CallTones.prototype.ringing = function () {
+    if (this.isConnected || this.isAccepted || this.mode === 'ringback') return;
+    this.start('ringback');
+  };
+  /** Incoming call on this device (website callee). The caller's tones are never played here. */
+  CallTones.prototype.ringtone = function () {
+    if (this.isConnected || this.isAccepted || this.mode === 'ringtone') return;
+    this.start('ringtone');
+  };
+  /** They picked up: silence until the media connects. */
+  CallTones.prototype.accepted = function () {
+    if (this.isAccepted || this.isConnected) return;
+    this.isAccepted = true; this.mode = ''; this.clear();
+  };
   CallTones.prototype.connected = function () {
     if (this.isConnected) return;
-    this.isConnected = true; this.clear(); this.pendingConnected = true;
-    this.listen(); this.resume();
+    this.isConnected = true; this.mode = ''; this.clear();
+    var token = this.token, chime = this.play('connected', false);
+    chime.ready.then(function (ok) {
+      if (this.token !== token) return;
+      if (!ok) { this.chimeWanted = true; this.listen(); }
+    }.bind(this));
   };
+  /** A gesture arrived (or the page asks): retry whatever the browser blocked. */
+  CallTones.prototype.resume = function () {
+    var token = this.token;
+    if (this.chimeWanted) {
+      this.chimeWanted = false;
+      this.play('connected', false).ready.then(function (ok) { if (this.token === token && !ok) this.chimeWanted = true; else this.unlistenIfIdle(); }.bind(this));
+      return;
+    }
+    if (this.loop && this.mode && this.loop.paused) {
+      var audio = this.loop;
+      var attempt; try { attempt = audio.play(); } catch (e) { attempt = Promise.reject(e); }
+      Promise.resolve(attempt).then(function () { if (this.token === token) this.unlistenIfIdle(); }.bind(this), function () {});
+    } else this.unlistenIfIdle();
+  };
+  CallTones.prototype.unlistenIfIdle = function () {
+    if (!this.chimeWanted && !(this.loop && this.mode && this.loop.paused)) this.unlisten();
+  };
+  /** Hang-up, decline, missed, error: everything stops, and the object is ready for the next call. */
   CallTones.prototype.stop = function () {
-    this.clear(); this.pendingConnected = false;
-    this.isConnected = false;
-    ['click', 'keydown', 'touchstart'].forEach(function (event) {
-      document.removeEventListener(event, this.unlock, true);
-    }, this);
-    this.listening = false;
-    var a = this.context; this.context = null;
-    if (a) { try { a.close().catch(function () {}); } catch (e) {} }
+    this.token++; this.clear(); this.mode = ''; this.chimeWanted = false;
+    this.isAccepted = false; this.isConnected = false; this.unlisten();
   };
+
   window.DahiCallTones = CallTones;
 })();

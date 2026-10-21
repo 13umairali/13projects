@@ -121,6 +121,6 @@
             if (a) a.onclick = function () { clear('me', 'Clear the chat with ' + name + '?\n\nAll messages, voice messages and files disappear for YOU. ' + name + ' keeps their own copy. You stay friends.'); };
         })();
     </script>
-    <script src="{{ asset('js/call-tones.js') }}?v=20261014" defer></script>
-    <script src="{{ asset('js/friend-call.js') }}?v=20261014-media" defer></script>
+    <script src="{{ asset('js/call-tones.js') }}?v=20261021-sounds" defer></script>
+    <script src="{{ asset('js/friend-call.js') }}?v=20261021-saas" defer></script>
 </x-layouts.app>

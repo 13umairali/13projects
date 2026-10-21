@@ -1,7 +1,12 @@
 package com.dahify.dahimail
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.Bitmap
 import android.view.View
+import android.view.animation.LinearInterpolator
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
@@ -48,12 +53,54 @@ internal object IncomingCallContent {
         decline.setOnClickListener { respond(onDecline) }
         val avatarUrl = callData["caller_avatar"].orEmpty()
 
+        startRipples(root)
+        val backdrop = root.findViewById<ImageView?>(R.id.incoming_backdrop)
+
         if (avatarUrl.startsWith("https://")) images.execute {
             val bitmap = NativePushReceiver.fetchAvatar(avatarUrl) ?: return@execute
+            val blurred = if (backdrop != null) blurred(bitmap) else null
             root.post { if (root.isAttachedToWindow) {
                 avatar.setImageBitmap(bitmap)
                 initialsView.visibility = View.INVISIBLE
+                if (blurred != null) backdrop?.setImageBitmap(blurred)
             } }
         }
     }
+
+    /** Same ripples as IncomingCallView: 3 circles, 2.4 s per cycle, 30 cycles (about a minute), then they stop. */
+    private fun startRipples(root: View) {
+        val ripples = listOf(R.id.incoming_ripple_0, R.id.incoming_ripple_1, R.id.incoming_ripple_2)
+            .mapNotNull { root.findViewById<View?>(it) }
+        if (ripples.isEmpty()) return
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 2400
+            repeatCount = 29
+            interpolator = LinearInterpolator()
+            addUpdateListener {
+                val value = it.animatedValue as Float
+                ripples.forEachIndexed { index, ripple ->
+                    val t = (value + index / 3f) % 1f
+                    val scale = 1f + .9f * t
+                    ripple.scaleX = scale
+                    ripple.scaleY = scale
+                    ripple.alpha = .10f * (1f - t)
+                }
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) { ripples.forEach { it.alpha = 0f } }
+            })
+        }
+        root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) {}
+            override fun onViewDetachedFromWindow(view: View) { animator.cancel() }
+        })
+        animator.start()
+    }
+
+    /** Heavy blur stand-in for the Flutter backdrop: shrink hard, the ImageView smooths it back up. */
+    private fun blurred(source: Bitmap): Bitmap? = try {
+        val width = 24
+        val height = (source.height * width / source.width.coerceAtLeast(1)).coerceAtLeast(1)
+        Bitmap.createScaledBitmap(source, width, height, true)
+    } catch (_: Exception) { null }
 }

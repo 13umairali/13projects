@@ -195,7 +195,8 @@
       if (r._status >= 400 || !r.data) { if (tones) tones.stop(); screen('mt-pre'); $('mt-pre-msg').textContent = r.message || 'Could not join.'; return; }
       if (finishing) { S.token = r.data.token; return terminate('/leave', { pid: r.data.pid }); }
       var d = r.data; S.pid = d.pid; S.token = d.token; S.role = d.role; S.name = d.name; S.ice = d.ice_servers || []; S.meeting = d.meeting; S.max = d.max || 8;
-      if (tones && KIND === 'call' && S.role === 'host' && d.meeting.call_status === 'ringing') tones.dialing();
+      // same rule as the app: Calling… + dial tone until their device is online, then Ringing… + ringback (never back)
+      if (tones && KIND === 'call' && S.role === 'host' && d.meeting.call_status === 'ringing') { tones.dialing(); if (d.meeting.peer_online && tones.ringing) tones.ringing(); }
       if (tones && d.meeting.call_status === 'active') tones.accepted();
       if (KIND === 'call' && S.role === 'host' && d.meeting.call_status === 'ringing') statusTimer = setInterval(checkCallState, 500);
       S.sigLast = 0; S.chatLast = 0; S.t0 = Date.now(); S.fails = 0;
@@ -295,7 +296,7 @@
   function leave() {
     if (finishing) return;
     terminalRequest = terminate('/leave', { pid: S.pid });
-    showEnd(KIND === 'call' ? 'You left the call.' : 'You left the meeting.', KIND !== 'call');
+    showEnd(KIND === 'call' ? 'Call ended' : 'You left the meeting.', KIND !== 'call');
   }
 
   // ───────── polling ─────────
@@ -304,12 +305,12 @@
     if (d.type === 'reconnected') { poll(); return; }
     if (d.code !== CODE) return;
     if (d.type === 'call_cancel' && !d.group) {
-      if (d.reason === 'answered') { if (tones) tones.accepted(); clearInterval(statusTimer); statusTimer = null; $('mt-clock').textContent = 'Accepted · Connecting audio…'; poll(); }
+      if (d.reason === 'answered') { if (tones) tones.accepted(); clearInterval(statusTimer); statusTimer = null; $('mt-clock').textContent = 'Connecting…'; poll(); }
       else if (!finishing) showEnd(d.reason === 'declined' ? 'Call declined' : 'Call ended', false);
       return;
     }
     if (d.type === 'meeting_changed') { poll(); return; }
-    if (d.type === 'meeting_ended') { if (!finishing) showEnd(KIND === 'call' ? 'The call was ended by another participant.' : 'The meeting was ended by another participant.', false); return; }
+    if (d.type === 'meeting_ended') { if (!finishing) showEnd(KIND === 'call' ? 'Call ended' : 'The meeting was ended by another participant.', false); return; }
     if (d.type === 'meeting_signal' && d.to === S.pid) {
       if (d.signal && S.status === 'joined' && S.parts.some(function (p) { return p.pid === d.signal.from; })) queueSignal(d.signal);
       else poll();
@@ -317,13 +318,19 @@
   });
   window.addEventListener('online', poll);
   document.addEventListener('visibilitychange', function () { if (!document.hidden && S.pid && S.status !== 'idle') poll(); });
+  /** nobody else is here yet: calls say Calling… / Ringing…, meetings say Waiting for others to join… (same wording as the app) */
+  function paintAlone() {
+    $('mt-alone-text').textContent = KIND === 'call' ? (S.meeting && S.meeting.peer_online ? 'Ringing…' : 'Calling…') : 'Waiting for others to join… Share the meeting link to invite people:';
+  }
   function checkCallState() {
     if (finishing || !S.pid || statusBusy) return;
     statusBusy = true;
     api('GET', '/poll?pid=' + S.pid + '&state_only=1').then(function (j) {
       if (finishing || !j.data) return;
       var d = j.data;
-      if (d.meeting && d.meeting.call_status === 'active') { if (tones) tones.accepted(); clearInterval(statusTimer); statusTimer = null; $('mt-clock').textContent = 'Accepted · Connecting audio…'; }
+      if (d.meeting) S.meeting = d.meeting;
+      if (d.meeting && d.meeting.call_status === 'ringing' && d.meeting.peer_online && tones && tones.ringing) { tones.ringing(); paintAlone(); }
+      if (d.meeting && d.meeting.call_status === 'active') { if (tones) tones.accepted(); clearInterval(statusTimer); statusTimer = null; $('mt-clock').textContent = 'Connecting…'; }
       if (d.me && d.me.status === 'ended') showEnd('Call ended', false);
     }).catch(noop).then(function () { statusBusy = false; });
   }
@@ -340,9 +347,13 @@
   }
   function apply(d) {
     if (finishing) return;
-    if (d.meeting) { S.meeting = d.meeting; if (tones && d.meeting.call_status === 'active') tones.accepted(); }
+    if (d.meeting) {
+      S.meeting = d.meeting;
+      if (tones && d.meeting.call_status === 'active') tones.accepted();
+      else if (tones && tones.ringing && KIND === 'call' && S.role === 'host' && d.meeting.call_status === 'ringing' && d.meeting.peer_online) tones.ringing();
+    }
     var me = d.me || {};
-    if (me.status === 'ended') { stopAll(); releaseMedia(); showEnd(KIND === 'call' ? 'The call has ended.' : 'The meeting has ended.', false); return; }
+    if (me.status === 'ended') { stopAll(); releaseMedia(); showEnd(KIND === 'call' ? 'Call ended' : 'The meeting has ended.', false); return; }
     if (me.status === 'removed') { stopAll(); releaseMedia(); showEnd('The host removed you from the meeting.', false); return; }
     if (me.status === 'denied') { stopAll(); releaseMedia(); showEnd('The host did not let you in.', false); return; }
     if (me.status === 'left') { stopAll(); releaseMedia(); showEnd('You were disconnected from the meeting.', true); return; }
@@ -549,7 +560,7 @@
     stage.className = anyShare ? 'spot' : 'grid';
     stage.style.setProperty('--cols', n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4);
     $('mt-alone').classList.toggle('hidden', n > 1);
-    $('mt-alone-text').textContent = KIND === 'call' ? 'Ringing… waiting for them to answer.' : 'You are the only one here. Share the meeting link to invite people:';
+    paintAlone();
     $('mt-alone-link').classList.toggle('hidden', KIND === 'call'); $('mt-alone-link').textContent = S.meeting ? S.meeting.url : '';
   }
 
@@ -697,14 +708,14 @@
     $('mt-return-end').onclick = function () { restoreRoom(); $('mt-b-leave').click(); };
     $('mt-pre-end').onclick = function () {
       if (S.pid) return leave();
-      if (joining) { terminalRequest = joinRequest; return showEnd('Call cancelled.', false); }
+      if (joining) { terminalRequest = joinRequest; return showEnd('Call ended', false); }
       if (AUTO && USER) {
         // Cancel even while browser media permission is still pending.
         terminalRequest = api('POST', '/join', { name: USER.name, audio: false, video: false }).then(function (r) {
           if (r._status >= 400 || !r.data) throw new Error(r.message || 'Could not cancel');
           S.token = r.data.token; return terminate('/leave', { pid: r.data.pid });
         });
-        showEnd('Call cancelled.', false);
+        showEnd('Call ended', false);
       } else { releaseMedia(); location.assign(returnTo); }
     };
     $('mt-wait-end').onclick = leave;

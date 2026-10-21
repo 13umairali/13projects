@@ -48,15 +48,69 @@
   function deliverEnd(path) { terminate(path).catch(function () { toast('Call disconnected locally', 'Could not confirm with the server. Check your connection.'); }); }
 
   // ───────── interface ─────────
+  // Same look as the phone app's incoming-call screen (flutter_app/lib/core/incoming_call_view.dart) and the SaaS
+  // call/meeting pages: dark navy gradient + blurred photo, name and "Incoming … Call…" on top, big photo with ripples,
+  // round Decline (left, red) and Accept (right, green) buttons. While a call runs it is a compact card.
+  var CSS = '' +
+    '.dcl{position:fixed;z-index:2147483000;color:#fff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;display:none}' +
+    '.dcl *{box-sizing:border-box}' +
+    '.dcl-full{inset:0;background:linear-gradient(180deg,#0b141a,#13222b);overflow:hidden}' +
+    '.dcl-bd{position:absolute;inset:-40px;background:center/cover no-repeat;filter:blur(28px);opacity:.32}' +
+    '.dcl-scrim{position:absolute;inset:0;background:rgba(0,0,0,.35)}' +
+    '.dcl-body{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;text-align:center;padding:calc(env(safe-area-inset-top,0px) + 2.5rem) 1.5rem calc(env(safe-area-inset-bottom,0px) + 2rem)}' +
+    '.dcl-name{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;max-width:min(90vw,36rem);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}' +
+    '.dcl-status{font-size:1rem;color:rgba(255,255,255,.7);margin-top:.5rem}' +
+    '.dcl-avwrap{position:relative;flex:1;width:100%;display:flex;align-items:center;justify-content:center;min-height:0}' +
+    '.dcl-av{position:relative;width:10rem;height:10rem;border-radius:50%;background:#252532 center/cover;display:flex;align-items:center;justify-content:center;font-size:3.5rem;font-weight:600;box-shadow:0 18px 50px rgba(0,0,0,.45)}' +
+    '.dcl-rp{position:absolute;left:50%;top:50%;width:10rem;height:10rem;margin:-5rem 0 0 -5rem;border-radius:50%;background:rgba(255,255,255,.1);opacity:0;animation:dcl-ripple 2.4s linear 30}' +
+    '.dcl-rp:nth-child(2){animation-delay:.8s}.dcl-rp:nth-child(3){animation-delay:1.6s}' +
+    '@keyframes dcl-ripple{0%{transform:scale(1);opacity:.1}100%{transform:scale(1.9);opacity:0}}' +
+    '@media (prefers-reduced-motion:reduce){.dcl-rp{animation:none}}' +
+    '.dcl-actions{display:flex;justify-content:space-evenly;width:min(24rem,100%);direction:ltr}' +
+    '.dcl-card .dcl-actions{width:100%;justify-content:flex-end;gap:.6rem}' +
+    '.dcl-col{display:flex;flex-direction:column;align-items:center;gap:.5rem;font-size:.875rem;color:rgba(255,255,255,.7)}' +
+    '.dcl-b{width:4.4rem;height:4.4rem;border:0;border-radius:50%;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .1s,filter .15s}' +
+    '.dcl-b:hover{filter:brightness(1.08)}.dcl-b:active{transform:scale(.94)}.dcl-b:disabled{opacity:.5;cursor:default}' +
+    '.dcl-b svg{width:30px;height:30px}' +
+    '.dcl-b:focus-visible,.dcl-pill:focus-visible{outline:2px solid #60a5fa;outline-offset:3px}' +
+    '.dcl-b.accept{background:#25d366}.dcl-b.decline{background:#f15c6d}.dcl-b.neutral{background:#2e3c45}' +
+    '.dcl-card{right:1.25rem;bottom:1.25rem;width:20rem;max-width:calc(100vw - 2.5rem);background:rgba(17,28,36,.96);border:1px solid rgba(255,255,255,.1);border-radius:1.25rem;box-shadow:0 14px 40px rgba(0,0,0,.45);padding:1rem;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}' +
+    '.dcl-card .dcl-body{height:auto;padding:0;align-items:stretch;text-align:left}' +
+    '.dcl-card .dcl-bd,.dcl-card .dcl-scrim,.dcl-card .dcl-avwrap{display:none}' +
+    '.dcl-card .dcl-name{font-size:1rem;font-weight:600}.dcl-card .dcl-status{font-size:.85rem;margin-top:.15rem;font-variant-numeric:tabular-nums}' +
+    '.dcl-card .dcl-actions{margin-top:.85rem}' +
+    '.dcl-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}' +
+    '.dcl-card .dcl-b{width:auto;height:2.5rem;border-radius:999px;padding:0 1.1rem;font-weight:600;font-size:.875rem;flex:1}.dcl-card .dcl-b svg{display:none}' +
+    '.dcl-card .dcl-t{position:static;width:auto;height:auto;overflow:visible;clip:auto}' +
+    '.dcl-card .dcl-col{flex:1;gap:0}.dcl-card .dcl-col>span{display:none}' +
+    '.dcl-pill{border:0;border-radius:999px;padding:.55rem 1rem;color:#fff;background:#2563eb;font:inherit;font-weight:600;cursor:pointer;margin-top:.6rem}' +
+    '.dcl-toast{position:fixed;right:1.25rem;top:1.25rem;width:19rem;max-width:calc(100vw - 2.5rem);z-index:2147483000;background:rgba(17,28,36,.96);color:#fff;border:1px solid rgba(255,255,255,.1);border-radius:1rem;box-shadow:0 14px 40px rgba(0,0,0,.45);padding:.8rem 1rem;cursor:pointer;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}' +
+    '.dcl-toast b{display:block;font-size:.95rem}.dcl-toast span{display:block;color:rgba(255,255,255,.7);font-size:.85rem;margin-top:.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.dcl-rooms{position:fixed;bottom:1.25rem;right:1.25rem;max-width:calc(100vw - 2.5rem);z-index:60;display:grid;gap:.4rem;padding:.6rem;border-radius:1rem;background:rgba(17,28,36,.96);border:1px solid rgba(255,255,255,.1);box-shadow:0 14px 40px rgba(0,0,0,.45);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}' +
+    '.dcl-rooms a{display:block;padding:.55rem .9rem;border-radius:.75rem;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;font-size:.9rem}.dcl-rooms a:hover{background:#1d4ed8}';
+  var ICONS = {
+    accept: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.05 15.05 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.6 21 3 13.4 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02z"/></svg>',
+    video: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11z"/></svg>',
+    decline: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08A.96.96 0 0 1 0 12.37c0-.28.11-.53.29-.71C3.34 8.77 7.46 7 12 7s8.66 1.77 11.71 4.66c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.3 11.3 0 0 0-2.66-1.85.99.99 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>'
+  };
+  function initials(name) { return String(name || '').trim().split(/\s+/).slice(0, 2).map(function (part) { return part.charAt(0).toUpperCase(); }).join(''); }
+  function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+  function injectStyles() {
+    if (injectStyles.done) return; injectStyles.done = true;
+    var st = el('style'); st.textContent = CSS; (document.head || document.body).appendChild(st);
+  }
+  var bdEl = null, avEl = null, rippleEls = [];
   function build() {
     if (box) return;
-    box = document.createElement('div');
-    box.style.cssText = 'position:fixed;right:1.25rem;bottom:1.25rem;width:19rem;max-width:calc(100vw - 2.5rem);z-index:2147483000;background:#1f1b2e;color:#fff;border-radius:1.25rem;box-shadow:0 12px 40px rgba(0,0,0,.4);padding:1.1rem 1.1rem 1rem;display:none;font-family:inherit';
-    callerAvatar = document.createElement('div'); callerAvatar.style.cssText = 'width:104px;height:104px;border-radius:50%;background:#ffffff18;display:none;align-items:center;justify-content:center;font-size:2.5rem;margin-bottom:28px'; box.appendChild(callerAvatar);
-    nameEl = document.createElement('div'); nameEl.style.cssText = 'font-weight:700;font-size:1.05rem';
-    statusEl = document.createElement('div'); statusEl.style.cssText = 'opacity:.8;font-size:.85rem;margin-top:.15rem';
-    btnRow = document.createElement('div'); btnRow.style.cssText = 'display:flex;gap:.6rem;margin-top:.9rem';
-    box.appendChild(nameEl); box.appendChild(statusEl); box.appendChild(btnRow);
+    injectStyles();
+    box = el('div', 'dcl dcl-card');
+    bdEl = el('div', 'dcl-bd'); var scrim = el('div', 'dcl-scrim'), body = el('div', 'dcl-body');
+    nameEl = el('div', 'dcl-name'); statusEl = el('div', 'dcl-status'); statusEl.setAttribute('role', 'status'); statusEl.setAttribute('aria-live', 'polite');
+    var wrap = el('div', 'dcl-avwrap'); for (var i = 0; i < 3; i++) wrap.appendChild(el('span', 'dcl-rp'));
+    callerAvatar = avEl = el('div', 'dcl-av'); avEl.setAttribute('aria-hidden', 'true'); wrap.appendChild(avEl);
+    btnRow = el('div', 'dcl-actions');
+    body.appendChild(nameEl); body.appendChild(statusEl); body.appendChild(wrap); body.appendChild(btnRow);
+    box.appendChild(bdEl); box.appendChild(scrim); box.appendChild(body);
     document.body.appendChild(box);
     box.addEventListener('keydown', function (event) {
       if (!S.incoming || event.key !== 'Tab') return;
@@ -66,31 +120,39 @@
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     });
-    enableAudio = document.createElement('button'); enableAudio.textContent = 'Enable call audio'; enableAudio.style.display = 'none';
-    enableAudio.onclick = playCallAudio; box.appendChild(enableAudio);
+    enableAudio = el('button', 'dcl-pill'); enableAudio.type = 'button'; enableAudio.textContent = 'Enable call audio'; enableAudio.style.display = 'none';
+    enableAudio.onclick = playCallAudio; body.appendChild(enableAudio);
     audio = document.createElement('audio'); audio.autoplay = true; audio.setAttribute('playsinline', ''); document.body.appendChild(audio);
   }
-  function button(label, color, fn) {
-    var b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.onclick = fn;
-    b.style.cssText = 'flex:1;border:0;border-radius:999px;padding:.6rem .5rem;color:#fff;font-weight:600;cursor:pointer;background:' + color;
-    return b;
+  /** buttons: [label, kind ('accept' | 'decline' | 'neutral'), handler, disabled?] */
+  function button(label, kind, fn, disabled) {
+    var col = el('div', 'dcl-col'), b = el('button', 'dcl-b ' + kind), cap = el('span');
+    b.type = 'button'; b.onclick = fn; b.disabled = !!disabled; b.setAttribute('aria-label', label);
+    var video = S.incoming && S.incoming.video && !S.incoming.audio_only && !S.incoming.group;
+    b.innerHTML = ICONS[kind === 'accept' ? (video ? 'video' : 'accept') : kind === 'decline' ? 'decline' : ''] || '';
+    var t = el('span', 'dcl-t'); t.textContent = label; b.appendChild(t);   // icon in the full screen, text in the compact card
+    cap.textContent = label; col.appendChild(b); col.appendChild(cap);
+    return { col: col, b: b };
   }
-  function show(name, status, buttons) {
+  function show(name, status, buttons, avatarUrl) {
     build(); clearTimeout(hideTimer);
+    var peer = ((S.incoming || S.call) || {}).peer || {}, photo = avatarUrl || peer.avatar_url || null;
     nameEl.textContent = name; statusEl.textContent = status; btnRow.innerHTML = ''; S.muteBtn = null;
-    (buttons || []).forEach(function (b) { var e = button(b[0], b[1], b[2]); if (b[0] === 'Mute' || b[0] === 'Unmute') S.muteBtn = e; btnRow.appendChild(e); });
+    var first = null;
+    (buttons || []).forEach(function (spec) {
+      var made = button(spec[0], spec[1], spec[2], spec[3]);
+      if (spec[0] === 'Mute' || spec[0] === 'Unmute') S.muteBtn = made.b;
+      if (!first && !spec[3]) first = made.b;
+      btnRow.appendChild(made.col);
+    });
     var incoming = !!S.incoming;
-    callerAvatar.style.display = incoming ? 'flex' : 'none'; callerAvatar.textContent = name.split(/\s+/).slice(0,2).map(function (part) { return part.charAt(0).toUpperCase(); }).join('');
-    box.style.inset = incoming ? '0' : 'auto 1.25rem 1.25rem auto';
-    box.style.width = incoming ? '100vw' : '19rem'; box.style.maxWidth = incoming ? 'none' : 'calc(100vw - 2.5rem)';
-    box.style.height = incoming ? '100dvh' : 'auto'; box.style.borderRadius = incoming ? '0' : '1.25rem';
-    box.style.display = incoming ? 'flex' : 'block'; box.style.flexDirection = 'column'; box.style.alignItems = 'center'; box.style.justifyContent = 'center';
-    box.style.background = incoming ? 'radial-gradient(circle at 50% 30%, #303b60, #101521 70%)' : '#1f1b2e';
-    nameEl.style.fontSize = incoming ? '2rem' : '1.05rem'; statusEl.style.fontSize = incoming ? '1rem' : '.85rem';
-    btnRow.style.width = incoming ? 'min(360px, 90vw)' : '100%'; btnRow.style.marginTop = incoming ? '3rem' : '.9rem';
+    box.className = 'dcl ' + (incoming ? 'dcl-full' : 'dcl-card');
+    avEl.style.backgroundImage = photo ? 'url("' + String(photo).replace(/"/g, '%22') + '")' : ''; avEl.textContent = photo ? '' : initials(name);
+    bdEl.style.backgroundImage = photo ? 'url("' + String(photo).replace(/"/g, '%22') + '")' : '';
+    box.style.display = 'block';
     box.setAttribute('aria-modal', incoming ? 'true' : 'false');
     box.setAttribute('role', incoming ? 'dialog' : 'status'); box.setAttribute('aria-label', status);
-    if (incoming && btnRow.firstChild) btnRow.firstChild.focus();
+    if (incoming && first && first.focus) first.focus();
   }
   function setStatus(t) { if (statusEl) statusEl.textContent = t; }
   function hide() { if (box) box.style.display = 'none'; }
@@ -135,11 +197,10 @@
     } catch (e) {}
   }
   function toast(title, text, url) {
-    var t = document.createElement('div');
-    t.style.cssText = 'position:fixed;right:1.25rem;top:1.25rem;width:18rem;max-width:calc(100vw - 2.5rem);z-index:2147483000;background:#1f1b2e;color:#fff;border-radius:1rem;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:.8rem 1rem;cursor:pointer;font-family:inherit';
-    var a = document.createElement('div'); a.style.cssText = 'font-weight:700;font-size:.95rem'; a.textContent = title;
-    var b = document.createElement('div'); b.style.cssText = 'opacity:.85;font-size:.85rem;margin-top:.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'; b.textContent = text;
-    t.appendChild(a); t.appendChild(b); t.onclick = function () { if (url) window.location.href = url; };
+    injectStyles();
+    var t = el('div', 'dcl-toast'), head = el('b'), body = el('span');
+    head.textContent = title; body.textContent = text; t.appendChild(head); t.appendChild(body);
+    t.onclick = function () { if (url) window.location.href = url; };
     document.body.appendChild(t); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 7000);
   }
   try {
@@ -150,12 +211,12 @@
   function resumableRooms(rooms) {
     var old = document.getElementById('dahi-resume-rooms'); if (old) old.remove();
     if (!rooms || !rooms.length || S.call || S.incoming) return;
-    var bar = document.createElement('aside'); bar.id = 'dahi-resume-rooms'; bar.setAttribute('aria-label', 'Ongoing calls and meetings');
-    bar.style.cssText = 'position:fixed;bottom:18px;right:18px;max-width:calc(100vw - 36px);z-index:60;display:grid;gap:8px;padding:12px;border-radius:14px;background:#24463a;color:white;box-shadow:0 6px 24px #0003';
+    injectStyles();
+    var bar = el('aside', 'dcl-rooms'); bar.id = 'dahi-resume-rooms'; bar.setAttribute('aria-label', 'Ongoing calls and meetings');
     rooms.forEach(function (room) {
-      var a = document.createElement('a'); a.textContent = (room.rejoin === false ? 'Join · ' : 'Rejoin · ') + room.title;
+      var a = el('a'); a.textContent = (room.rejoin === false ? 'Join · ' : 'Rejoin · ') + room.title;
       a.href = '/meet/' + encodeURIComponent(room.code) + '?auto=1' + (room.audio_only ? '&audio=1' : '') + '&return_to=' + encodeURIComponent(location.pathname + location.search);
-      a.style.cssText = 'padding:8px 12px;color:inherit;text-decoration:none;font-weight:600'; bar.appendChild(a);
+      bar.appendChild(a);
     });
     document.body.appendChild(bar);
   }
@@ -185,8 +246,8 @@
       o.frequency.value = 880; g.gain.value = 0.06; o.connect(g); g.connect(actx.destination); o.start(); setTimeout(function () { o.stop(); }, 350);
     } catch (e) {}
   }
-  function startRing() { stopRing(); beep(); S.ring = setInterval(beep, 2000); }
-  function stopRing() { if (S.ring) { clearInterval(S.ring); S.ring = null; } }
+  function startRing() { stopRing(); if (tones) tones.ringtone(); else { beep(); S.ring = setInterval(beep, 2000); } }
+  function stopRing() { if (tones) tones.stop(); if (S.ring) { clearInterval(S.ring); S.ring = null; } }
 
   function playCallAudio() {
     if (!audio || !audio.srcObject) return Promise.resolve();
@@ -277,7 +338,7 @@
     if (S.stream) S.stream.getAudioTracks().forEach(function (t) { t.enabled = !S.muted; });
     if (S.muteBtn) S.muteBtn.textContent = S.muted ? 'Unmute' : 'Mute';
   }
-  function inCallButtons() { return [['Mute', '#475569', toggleMute], ['End', '#dc2626', function () { endCall('Call ended'); }]]; }
+  function inCallButtons() { return [['Mute', 'neutral', toggleMute], ['End', 'decline', function () { endCall('Call ended'); }]]; }
 
   // ───────── start / answer ─────────
   function start(userId, name) {
@@ -287,7 +348,7 @@
     api('POST', '/calls/start/' + userId).then(function (r) {
       if (!r.data) { S.starting = false; show(name || 'Friend', r.message || 'Could not start the call.', []); hideTimer = setTimeout(hide, 3000); return; }
       S.call = r.data; S.starting = false; S.last = 0;
-      show(S.call.peer.name, 'Calling…', [['End', '#dc2626', function () { endCall('Call cancelled'); }]]);
+      show(S.call.peer.name, 'Calling…', [['End', 'decline', function () { endCall('Call ended'); }]]);
       return prepare(S.call.ice_servers).then(function () { if (tones) tones.dialing(); return S.pc.createOffer(); })
         .then(function (o) { return S.pc.setLocalDescription(o); })
         .then(function () { return api('POST', '/calls/' + S.call.id + '/signal', { type: 'offer', payload: JSON.stringify(S.pc.localDescription) }); })
@@ -298,14 +359,15 @@
   function showIncoming(c) {
     if (endedCalls.has(Number(c.id)) || S.call || S.starting || accepting || (S.incoming && S.incoming.id === c.id)) return;
     S.incoming = c; startRing();
-    var kind = c.group ? 'meeting invitation' : c.audio_only ? 'audio call' : c.video ? 'video call' : 'call';
+    // same wording and order as the app: "Incoming Meeting…" / "Incoming Video Call…" / "Incoming Audio Call…", Decline left, Accept right
+    var kind = c.group ? 'Meeting' : (c.video && !c.audio_only) ? 'Video Call' : 'Audio Call';
     desktopNotify('Incoming ' + kind, c.peer.name + ' is calling you', function () {});
-    show(c.peer.name, 'Incoming ' + kind + '…', [['Accept', '#16a34a', accept], ['Decline', '#dc2626', decline]]);
+    show(c.peer.name, 'Incoming ' + kind + '…', [['Decline', 'decline', decline], ['Accept', 'accept', accept]]);
     if (PENDING && PENDING.id === c.id) { var act = PENDING.action; PENDING = null; if (act === 'decline') decline(); else accept(); }
   }
   function accept() {
     var c = S.incoming; if (!c || accepting) return; accepting = true; stopRing();
-    show(c.peer.name, 'Connecting…', []);
+    show(c.peer.name, 'Please wait…', [['Decline', 'decline', decline, true], ['Accept', 'accept', accept, true]]);   // busy: dimmed, like the app
     api('POST', '/calls/' + c.id + '/answer').then(function (r) {
       if (endedCalls.has(Number(c.id)) || !S.incoming || S.incoming.id !== c.id) return;
       accepting = false;

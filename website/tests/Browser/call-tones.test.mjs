@@ -4,56 +4,79 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const source = readFileSync(new URL('../../public/js/call-tones.js', import.meta.url), 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+/** Fake <audio>: records every file, whether it loops, and can refuse to play until a gesture "unlocks" autoplay. */
 function harness({ blocked = false } = {}) {
-  const listeners = new Map(), timers = new Map(), notes = [], contexts = [];
-  let id = 0;
-  class Context {
-    constructor() { this.state = 'suspended'; this.currentTime = 0; contexts.push(this); }
-    resume() {
-      if (blocked) return Promise.reject(Error('gesture required'));
-      this.state = 'running'; return Promise.resolve();
-    }
-    async close() { this.state = 'closed'; }
-    createOscillator() {
-      const oscillator = { frequency: {}, connect() {}, disconnect() {}, start(t) { this.startAt = t; }, stop(t) { this.stopAt = t; if (t == null && this.onended) this.onended(); } };
-      notes.push(oscillator); return oscillator;
-    }
-    createGain() { return { connect() {}, disconnect() {}, gain: { setValueAtTime() {}, linearRampToValueAtTime() {} } }; }
+  const listeners = new Map(), sounds = [];
+  class Audio {
+    constructor(src) { this.src = src; this.loop = false; this.paused = true; this.file = src.split('/').pop(); sounds.push(this); }
+    play() { if (blocked) return Promise.reject(Error('gesture required')); this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+    removeAttribute() {}
   }
-  const window = { AudioContext: Context };
-  vm.runInNewContext(source, { window, document: { addEventListener(name, fn) { listeners.set(name, fn); }, removeEventListener(name) { listeners.delete(name); } },
-    setInterval(fn) { timers.set(++id, fn); return id; }, clearInterval(id) { timers.delete(id); }, Promise,
-  });
-  return { tones: new window.DahiCallTones(), notes, contexts, timers, listeners, allow() { blocked = false; } };
+  const window = {};
+  vm.runInNewContext(source, { window, Audio, Promise,
+    document: { addEventListener(name, fn) { listeners.set(name, fn); }, removeEventListener(name) { listeners.delete(name); } } });
+  const playing = () => sounds.filter(s => !s.paused).map(s => s.file);
+  return { tones: new window.DahiCallTones(), sounds, listeners, playing, allow() { blocked = false; } };
 }
-test('dialing loops, connection replaces it with one chime, and hangup releases playback', async () => {
+
+test('the app\'s three sounds are used: dialing, then ringback, then silence, then one connected chime', async () => {
   const h = harness(); h.tones.dialing(); await flush();
-  assert.deepEqual(h.notes.map(n => n.frequency.value), [440, 480]);
+  assert.deepEqual(h.playing(), ['dialing.wav']); assert.equal(h.sounds[0].loop, true);
+  h.tones.ringing(); await flush();
+  assert.deepEqual(h.playing(), ['ringback.wav']); assert.equal(h.sounds[1].loop, true);
+  h.tones.accepted(); await flush();
+  assert.deepEqual(h.playing(), []);
   h.tones.connected(); h.tones.connected(); await flush();
-  assert.equal(h.timers.size, 0);
-  assert.deepEqual(h.notes.map(n => n.frequency.value), [440, 480, 660, 880]);
-  assert.equal(h.notes[0].stopAt, undefined);
-  h.tones.stop(); await flush();
-  assert.equal(h.contexts[0].state, 'closed'); assert.equal(h.listeners.size, 0);
-});
-test('blocked autoplay waits for a gesture and cannot queue repeated dialing notes', async () => {
-  const h = harness({ blocked: true }); h.tones.dialing(); await flush();
-  for (const timer of h.timers.values()) { timer(); timer(); }
-  assert.equal(h.notes.length, 0);
-  h.allow(); h.listeners.get('click')(); await flush();
-  assert.equal(h.notes.length, 2); h.tones.stop();
-});
-test('hangup during resume never produces a late dialing or connection sound', async () => {
-  const h = harness(); h.tones.dialing(); h.tones.connected(); h.tones.stop(); await flush();
-  assert.equal(h.notes.length, 0); assert.equal(h.timers.size, 0);
+  assert.deepEqual(h.playing(), ['connected.wav']); assert.equal(h.sounds[2].loop, false);
+  assert.equal(h.sounds.length, 3);
 });
 
-test('acceptance stops ringback before media connects and still allows the connected chime', async () => {
+test('dialing never replaces ringback', async () => {
+  const h = harness(); h.tones.ringing(); h.tones.dialing(); h.tones.dialing(); await flush();
+  assert.deepEqual(h.sounds.map(s => s.file), ['ringback.wav']);
+  assert.deepEqual(h.playing(), ['ringback.wav']);
+});
+
+test('after the call is accepted neither dialing nor ringback can restart', async () => {
+  const h = harness(); h.tones.dialing(); h.tones.accepted();
+  h.tones.dialing(); h.tones.ringing(); await flush();
+  assert.deepEqual(h.playing(), []); assert.deepEqual(h.sounds.map(s => s.file), ['dialing.wav']);
+});
+
+test('the callee hears only the ringtone, which stops on accept and on decline', async () => {
+  const h = harness(); h.tones.ringtone(); h.tones.ringtone(); await flush();
+  assert.deepEqual(h.sounds.map(s => s.file), ['ringtone.wav']); assert.equal(h.sounds[0].loop, true);
+  h.tones.stop(); await flush();
+  assert.deepEqual(h.playing(), []);
+});
+
+test('hang-up stops everything, releases listeners and the same object can serve the next call', async () => {
   const h = harness(); h.tones.dialing(); await flush();
-  h.tones.accepted();
-  assert.equal(h.timers.size, 0);
-  assert.equal(h.tones.nodes.length, 0);
-  h.tones.connected(); await flush();
-  assert.equal(h.tones.isConnected, true);
-  h.tones.stop();
+  h.tones.stop(); await flush();
+  assert.deepEqual(h.playing(), []); assert.equal(h.listeners.size, 0);
+  h.tones.dialing(); await flush();
+  assert.deepEqual(h.playing(), ['dialing.wav']);
+});
+
+test('blocked autoplay waits for one gesture and cannot queue repeated dialing sounds', async () => {
+  const h = harness({ blocked: true }); h.tones.dialing(); h.tones.dialing(); await flush();
+  assert.equal(h.sounds.length, 1); assert.deepEqual(h.playing(), []);
+  assert.ok(h.listeners.get('click'));
+  h.allow(); h.listeners.get('click')(); await flush();
+  assert.deepEqual(h.playing(), ['dialing.wav']); assert.equal(h.sounds.length, 1);
+  assert.equal(h.listeners.size, 0);
+});
+
+test('a blocked connected chime plays on the next gesture', async () => {
+  const h = harness({ blocked: true }); h.tones.connected(); await flush();
+  assert.deepEqual(h.playing(), []);
+  h.allow(); h.listeners.get('keydown')(); await flush();
+  assert.deepEqual(h.playing(), ['connected.wav']);
+});
+
+test('hang-up while the browser is still deciding never produces a late sound', async () => {
+  const h = harness(); h.tones.dialing(); h.tones.connected(); h.tones.stop(); await flush();
+  assert.deepEqual(h.playing(), []); assert.equal(h.listeners.size, 0);
 });

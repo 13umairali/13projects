@@ -220,7 +220,20 @@ class FriendCallService
         if (!$c) return null;
         if ($c->status === 'ringing') { $this->expire([$me->id]); $c = DB::table('friend_calls')->find($callId); }
         $rows = DB::table('friend_call_signals')->where('call_id', $callId)->where('from_user_id', '!=', $me->id)->where('id', '>', $after)->orderBy('id')->limit(100)->get();
-        return ['status' => $c->status, 'signals' => $rows->map(fn ($r) => ['id' => (int) $r->id, 'type' => $r->type, 'payload' => $r->payload])->all()];
+        return ['status' => $c->status, 'peer_online' => $this->peerOnline($me, $c),
+            'signals' => $rows->map(fn ($r) => ['id' => (int) $r->id, 'type' => $r->type, 'payload' => $r->payload])->all()];
+    }
+
+    /**
+     * Same rule as the phone app: the caller sees "Ringing…" + ringback once the other person's device is online,
+     * and "Calling…" + the dial tone while it is not. Presence privacy applies (a hidden status never counts as online).
+     */
+    public function peerOnline(User $me, object $c): bool
+    {
+        if ($c->status !== 'ringing') return $c->status === 'active';
+        $peerId = (int) $c->caller_id === $me->id ? (int) $c->callee_id : (int) $c->caller_id;
+        try { return (bool) (app(PresenceService::class)->forViewer($me, [$peerId])[$peerId]['online'] ?? false); }
+        catch (\Throwable $e) { return false; }
     }
 
     /** @return array{0:bool,1:string} */

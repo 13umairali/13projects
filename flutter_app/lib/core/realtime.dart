@@ -10,6 +10,8 @@ class Realtime {
   static final I = Realtime._();
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get events => _events.stream;
+  /// true while the WebSocket is open (call signals then arrive at once instead of waiting for a poll)
+  bool get isConnected => _socket != null;
   Api? _api;
   WebSocket? _socket;
   Timer? _retry, _heartbeat;

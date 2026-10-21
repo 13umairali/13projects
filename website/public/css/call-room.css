@@ -1,0 +1,88 @@
+/* One-to-one call screen (audio / video) — modern SaaS look.
+ * Same tokens as css/meeting-room.css and the same layout as the phone app's call screens:
+ * dark navy gradient with the blurred profile photo, name + status on top, big photo with ripples until the call
+ * is connected, a rounded control panel at the bottom. Ids are the ones call-room.js already uses. */
+:root {
+  --bg: #0b141a; --bg-2: #13222b; --panel: #1f2c34; --fill: #2e3c45;
+  --line: rgba(255, 255, 255, .08); --line-2: rgba(255, 255, 255, .16);
+  --ink: #f4f6f8; --muted: rgba(255, 255, 255, .7); --faint: rgba(255, 255, 255, .5);
+  --brand: #2563eb; --brand-2: #1d4ed8; --brand-ink: #93b4ff;
+  --danger: #f15c6d; --danger-2: #e0485a; --ok: #25d366;
+  --r: 14px; --r-lg: 20px; --r-xl: 28px;
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.45; overflow: hidden; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+.hidden { display: none !important; }
+:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+
+#cl { position: fixed; inset: 0; background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%); overflow: hidden; }
+#cl-bd { position: absolute; inset: -40px; background: center / cover no-repeat; filter: blur(28px); opacity: .32; transform: scale(1.05); }
+#cl-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .35); }
+
+/* remote video (video calls) */
+#cl-stage { position: absolute; inset: 0; display: grid; gap: 2px; grid-template-columns: 1fr; grid-auto-rows: 1fr; background: #000; }
+#cl-stage.g2, #cl-stage.g3 { grid-template-columns: 1fr 1fr; }
+#cl.audio #cl-stage, #cl.nostage #cl-stage { visibility: hidden; }          /* still plays the sound */
+.tile { position: relative; overflow: hidden; background: #111b21; min-height: 0; }
+.tile video { width: 100%; height: 100%; object-fit: cover; background: #000; }
+.tile.novideo video { visibility: hidden; }
+.tile .tav { position: absolute; inset: 0; margin: auto; width: 6.5rem; height: 6.5rem; border-radius: 50%; background: #252532 center / cover; display: none; align-items: center; justify-content: center; font-size: 2.4rem; font-weight: 600; }
+.tile.novideo .tav { display: flex; }
+.tile .tn { position: absolute; left: .75rem; bottom: 9.5rem; background: rgba(0, 0, 0, .5); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); padding: .2rem .65rem; border-radius: 999px; font-size: .8rem; }
+.tile .tn:empty { display: none; }
+
+/* top bar: what kind of call this is, and (with video on screen) who and for how long */
+#cl-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: .75rem; padding: calc(env(safe-area-inset-top, 0px) + .9rem) 1rem .9rem; pointer-events: none; }
+#cl.video-on #cl-top { background: linear-gradient(180deg, rgba(0, 0, 0, .6), transparent); padding-bottom: 1.75rem; }
+.kind { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .7rem; border-radius: 999px; background: rgba(255, 255, 255, .08); border: 1px solid var(--line); color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: .02em; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.kind svg { width: 14px; height: 14px; }
+#cl-head { display: none; min-width: 0; }
+#cl.video-on #cl-head { display: block; }
+#cl-head .n { font-weight: 600; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#cl-head .s { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* centre: photo with ripples (audio calls, ringing, or when the other camera is off) */
+#cl-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: calc(env(safe-area-inset-top, 0px) + 4.5rem) 1.5rem 11rem; pointer-events: none; z-index: 1; }
+#cl-center.compact { display: none; }
+#cl-name { font-size: clamp(1.5rem, 4.2vw, 1.75rem); font-weight: 500; letter-spacing: -.01em; max-width: min(90vw, 36rem); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+#cl-status { font-size: 1rem; color: var(--muted); margin-top: .5rem; min-height: 1.5rem; font-variant-numeric: tabular-nums; }
+#cl-av-wrap { position: relative; flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; }
+#cl-av { position: relative; z-index: 1; width: 10rem; height: 10rem; border-radius: 50%; background: #252532 center / cover; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; font-weight: 600; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+.rp { position: absolute; left: 50%; top: 50%; width: 10rem; height: 10rem; margin: -5rem 0 0 -5rem; border-radius: 50%; background: rgba(255, 255, 255, .1); opacity: 0; }
+#cl.pulse .rp { animation: ripple 2.4s linear infinite; }
+#cl.pulse .rp:nth-child(2) { animation-delay: .8s; } #cl.pulse .rp:nth-child(3) { animation-delay: 1.6s; }
+@keyframes ripple { 0% { transform: scale(1); opacity: .1; } 100% { transform: scale(1.9); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #cl.pulse .rp { animation: none; } }
+
+/* my own picture: rounded window, drag it anywhere */
+#cl-self { position: absolute; right: 1rem; top: calc(env(safe-area-inset-top, 0px) + 4.25rem); width: 7.25rem; aspect-ratio: 3 / 4; border-radius: var(--r-lg); overflow: hidden; background: #000; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); border: 1px solid var(--line-2); z-index: 4; touch-action: none; cursor: grab; transition: left .18s ease; }
+#cl-self.drag { cursor: grabbing; transition: none; }
+#cl-self video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); pointer-events: none; }
+@media (min-width: 760px) { #cl-self { width: 11rem; } }
+
+/* control panel */
+#cl-bar { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, 30rem); display: flex; justify-content: center; align-items: flex-start; gap: 1.5rem; padding: 1.1rem 1.5rem calc(env(safe-area-inset-bottom, 0px) + 1.25rem); background: rgba(31, 44, 52, .86); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid var(--line); border-bottom: 0; border-radius: var(--r-xl) var(--r-xl) 0 0; box-shadow: 0 -12px 40px rgba(0, 0, 0, .35); z-index: 5; }
+@media (min-width: 640px) { #cl-bar { bottom: 1.25rem; border-bottom: 1px solid var(--line); border-radius: var(--r-xl); padding-bottom: 1.1rem; } }
+.ctl { display: flex; flex-direction: column; align-items: center; gap: .45rem; min-width: 4.25rem; }
+.ctl > span { font-size: .75rem; color: var(--muted); font-weight: 500; }
+.cb { width: 3.6rem; height: 3.6rem; border-radius: 50%; background: var(--fill); display: inline-flex; align-items: center; justify-content: center; transition: background .15s, transform .1s; }
+.cb:hover { background: #3a4a55; } .cb:active { transform: scale(.94); }
+.cb.off { background: #fff; color: #111b21; } .cb.off:hover { background: #e9edf0; }
+.cb.end { background: var(--danger); color: #fff; } .cb.end:hover { background: var(--danger-2); }
+.cb svg { width: 26px; height: 26px; }
+
+#cl-note { position: absolute; left: 50%; transform: translateX(-50%); bottom: 9.5rem; max-width: calc(100% - 2rem); background: rgba(17, 28, 36, .92); border: 1px solid var(--line-2); padding: .55rem 1rem; border-radius: 999px; font-size: .85rem; z-index: 6; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
+
+/* ended */
+#cl-end-msg { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(11, 20, 26, .9); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); z-index: 7; text-align: center; padding: 1.5rem; }
+#cl.ended #cl-end-msg { display: flex; }
+.end-card { width: min(100%, 22rem); padding: 1.75rem 1.5rem; border-radius: var(--r-xl); background: #111c24; border: 1px solid var(--line); box-shadow: 0 14px 40px rgba(0, 0, 0, .45); }
+.end-ico { width: 3.25rem; height: 3.25rem; margin: 0 auto 1rem; border-radius: 50%; background: rgba(241, 92, 109, .16); color: var(--danger); display: flex; align-items: center; justify-content: center; }
+#cl-end-title { font-size: 1.3rem; margin: 0 0 .3rem; font-weight: 600; letter-spacing: -.01em; }
+#cl-end-sub { color: var(--muted); margin: 0 0 1.25rem; min-height: 1.25rem; font-variant-numeric: tabular-nums; }
+#cl-back { background: var(--brand); color: #fff; font-weight: 600; padding: .8rem 1.75rem; border-radius: var(--r); width: 100%; transition: background .15s; }
+#cl-back:hover { background: var(--brand-2); }

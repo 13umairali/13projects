@@ -73,6 +73,13 @@ class MeetingController extends Controller
         $m = $this->svc->find($code);
         abort_unless($m && $m->status !== 'cancelled', 404);
         $u = $r->user();
+        // An audio / video CALL is not a meeting: the caller and the invited person get the call screen (photo, ringing, mute / camera / end),
+        // never the meeting lobby with "Your name", "Host" and "Join now". Guests and uninvited people still get the normal page.
+        if ($u && $m->kind === 'call' && $m->status !== 'ended') {
+            $mine = (int) $m->host_id === (int) $u->id
+                || \Illuminate\Support\Facades\DB::table('meeting_invitees')->where('meeting_id', $m->id)->where('user_id', $u->id)->exists();
+            if ($mine) return app(\App\Http\Controllers\Friends\CallPageController::class)->show($r, $code);
+        }
         // A source-only deployment may still have the previous Vite manifest.
         // Realtime accelerates the room's existing REST polling; missing assets
         // must not prevent the call screen itself from loading.

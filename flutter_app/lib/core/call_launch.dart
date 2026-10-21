@@ -44,7 +44,7 @@ class CallConnectingScreen extends StatelessWidget {
   const CallConnectingScreen({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFF111118),
+    backgroundColor: const Color(0xFF0B141A),
     body: SafeArea(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
       const Icon(Icons.call_rounded, color: Colors.white, size: 64),
       const SizedBox(height: 24),

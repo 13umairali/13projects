@@ -192,7 +192,7 @@ class MeetingService
         $invited = $user && DB::table('meeting_invitees')->where('meeting_id', $m->id)->where('user_id', $user->id)->exists();
         if (!$user) {
             if (!$m->allow_guests) return [false, 'Sign in to join this meeting.', null];
-            $guestName = trim(strip_tags((string) $guestName));
+            $guestName = Str::limit(trim(preg_replace('/\s+/u', ' ', strip_tags((string) $guestName))), 60, '');
             if ($guestName === '') return [false, 'Enter your name to join.', null];
         }
         if ($m->scheduled_at && !$isHost && now()->lt(Carbon::parse($m->scheduled_at, 'UTC')->subMinutes(15))) return [false, 'This meeting has not started yet. It opens 15 minutes before the start time.', null];
@@ -304,7 +304,16 @@ class MeetingService
         $callAudioOnly = $m->kind === 'call'
             ? (bool) DB::table('friend_calls')->where('meeting_code', $m->code)->where('group_invite', 0)->value('audio_only')
             : false;
+        $callRow = $m->kind === 'call' ? DB::table('friend_calls')->where('meeting_code', $m->code)->where('group_invite', 0)->orderBy('id')->first() : null;
+        $peerOnline = null; // only meaningful while a 1:1 call is ringing: drives "Calling…" (dial tone) vs "Ringing…" (ringback)
+        if ($callRow && $callRow->status === 'ringing') {
+            try {
+                $caller = User::find($callRow->caller_id);
+                $peerOnline = $caller ? (bool) (app(\App\Services\Friends\PresenceService::class)->forViewer($caller, [(int) $callRow->callee_id])[(int) $callRow->callee_id]['online'] ?? false) : false;
+            } catch (\Throwable $e) { $peerOnline = false; }
+        }
         return [
+            'peer_online' => $peerOnline,
             'scheduled_at' => $start?->toIso8601String(), 'duration' => (int) $m->duration_min,
             'ends_at' => $start ? $start->copy()->addMinutes((int) $m->duration_min)->toIso8601String() : null,
             'started_at' => $m->started_at ? Carbon::parse($m->started_at, 'UTC')->toIso8601String() : null,
@@ -336,7 +345,10 @@ class MeetingService
             $p = DB::table('meeting_participants')->find($p->id);
             if (!$m || !$p || !in_array($p->status, ['joined', 'waiting'], true)) return;
             $count = DB::table('meeting_participants')->where('meeting_id', $m->id)->where('status', 'joined')->count();
-            if ($check && $p->status === 'joined' && $count === 2) {
+            // Same rule as Zoom / Meet / Teams: a one-to-one CALL ends for both people when either hangs up, but a
+            // MEETING keeps running for the people still in it (the host role is handed over) until the last person
+            // leaves or the host ends it for everyone.
+            if ($check && $p->status === 'joined' && $count === 2 && $m->kind === 'call') {
                 $this->finish($m);
                 return;
             }

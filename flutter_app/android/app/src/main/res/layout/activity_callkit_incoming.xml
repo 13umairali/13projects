@@ -10,7 +10,7 @@
         android:id="@+id/ivBackground"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#111118"
+        android:background="#0B141A"
         android:scaleType="centerCrop"
         tools:ignore="ContentDescription" />
 

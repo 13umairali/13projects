@@ -31,3 +31,24 @@ Future<void> logRtcAudioStats(RTCPeerConnection pc, String label) async {
     debugPrint('[RTC-DIAG][$label] audioRtp error=${error.runtimeType}');
   }
 }
+
+/// Log WHICH route the call uses: host / srflx = direct, relay = through the TURN server. Types only, no addresses.
+Future<void> logRtcSelectedPair(RTCPeerConnection pc, String label) async {
+  try {
+    final reports = await pc.getStats();
+    final byId = {for (final r in reports) r.id: r};
+    for (final r in reports) {
+      if (r.type != 'candidate-pair') continue;
+      final v = r.values;
+      if (v['state'] != 'succeeded' || (v['nominated'] != true && v['selected'] != true)) continue;
+      final local = byId[v['localCandidateId']]?.values['candidateType'];
+      final remote = byId[v['remoteCandidateId']]?.values['candidateType'];
+      final rtt = v['currentRoundTripTime'];
+      debugPrint('[RTC-TIME][$label] route local=$local remote=$remote rtt=$rtt');
+      return;
+    }
+    debugPrint('[RTC-TIME][$label] route: no nominated pair found');
+  } catch (error) {
+    debugPrint('[RTC-TIME][$label] route error=${error.runtimeType}');
+  }
+}

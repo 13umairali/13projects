@@ -1,4 +1,5 @@
-/* One-to-one AUDIO / VIDEO call screen (like WhatsApp / Instagram): calling -> ringing -> connected -> ended.
+/* One-to-one AUDIO / VIDEO call screen, same rules as the phone app: Calling… (dial tone) -> Ringing… (ringback, once their
+ * device is online) -> Connecting… (silence) -> 00:01 (one chime) -> ended ("Call declined", "No answer" / "Missed call", "Call ended").
  * No "Join now", no lobby, no "end for me / for everyone": one red button hangs up for both people.
  * It uses the same signalling endpoints as the phone app (/meetings/api/{code}/...), so website <-> app calls work both ways.
  * Of two people, the one who joined LATER (higher id) sends the offer; the other answers and attaches its microphone AFTER
@@ -53,6 +54,8 @@
   var tones = window.DahiCallTones ? new window.DahiCallTones() : null;
   function ringStart() { if (tones && ROLE === 'caller') tones.dialing(); }
   function ringStop() { if (tones) tones.stop(); }
+  /** the other person picked up: both ring tones stop and can never restart (the app's rule) */
+  function pickedUp() { clearInterval(S.ringWatch); S.ringWatch = null; if (tones && tones.accepted) tones.accepted(); }
 
   // ───────── screen ─────────
   function others() { return S.parts.filter(function (p) { return !p.is_me; }); }
@@ -61,7 +64,7 @@
     if (S.ending) return S.endText || 'Call ended';
     var o = others();
     if (!S.pid) return 'Connecting…';
-    if (!o.length) return S.connectedAt ? 'Reconnecting…' : (S.callStatus === 'ringing' || ROLE === 'caller' ? (S.ringing ? 'Ringing…' : 'Calling…') : 'Connecting…');
+    if (!o.length) return S.connectedAt ? 'Reconnecting…' : (ROLE === 'caller' ? (S.ringing ? 'Ringing…' : 'Calling…') : 'Connecting…');
     if (!S.mediaUp) return 'Connecting…';
     return fmt(Math.max(0, Math.floor((Date.now() - S.connectedAt) / 1000)));
   }
@@ -73,6 +76,9 @@
     var st = statusText(); $('cl-status').textContent = st; $('cl-head-s').textContent = st;
     setAvatar($('cl-av'), single && single.avatar_url ? single : PEER);
     root.classList.toggle('ringing', !n && !S.ending);
+    root.classList.toggle('pulse', !S.mediaUp && !S.ending);          // ripples until the media is connected, like the app
+    var face = single && single.avatar_url ? single : PEER;
+    $('cl-bd').style.backgroundImage = face && face.avatar_url ? 'url("' + String(face.avatar_url).replace(/"/g, '%22') + '")' : '';
     root.classList.toggle('video-on', showVideo);
     root.classList.toggle('nostage', !showVideo);
     $('cl-center').classList.toggle('compact', showVideo);
@@ -100,6 +106,9 @@
     // buttons
     $('cl-mic').innerHTML = svg(S.micOn ? 'mic' : 'micOff'); $('cl-mic').classList.toggle('off', !S.micOn);
     $('cl-cam').innerHTML = svg(S.camOn ? 'cam' : 'camOff'); $('cl-cam').classList.toggle('off', !S.camOn);
+    $('cl-mic').setAttribute('aria-pressed', S.micOn ? 'false' : 'true'); $('cl-mic').setAttribute('aria-label', S.micOn ? 'Mute' : 'Unmute');
+    $('cl-cam').setAttribute('aria-pressed', S.camOn ? 'false' : 'true'); $('cl-cam').setAttribute('aria-label', S.camOn ? 'Turn camera off' : 'Turn camera on');
+    $('cl-mic-l').textContent = S.micOn ? 'Mute' : 'Unmute'; $('cl-cam-l').textContent = S.camOn ? 'Camera' : 'Camera off';
     $('cl-end').innerHTML = svg('end');
   }
   function play(v) { try { var p = v.play(); if (p && p.catch) p.catch(function () { S.tapNeeded = true; $('cl-note').classList.remove('hidden'); }); } catch (e) {} }
@@ -265,7 +274,7 @@
     if (me.status === 'ended' || me.status === 'left' || me.status === 'removed' || me.status === 'denied') { remoteEnded(); return; }
     S.parts = d.participants || [];
     var o = others();
-    if (o.length) { clearInterval(S.ringWatch); S.ringWatch = null; }
+    if (o.length) pickedUp();
     syncPeers();
     (d.signals || []).forEach(function (sg) { S.sigLast = Math.max(S.sigLast, sg.id); queueSignal(sg); });
     paint();
@@ -287,18 +296,23 @@
   function watchRing() {
     if (!CALL_ID) return;
     clearInterval(S.ringWatch);
-    S.ringWatch = setInterval(function () {
+    var look = function () {
       if (S.ending) return;
       req('GET', FR + '/calls/' + CALL_ID + '/signals?after=0').then(function (j) {
         var d = j.data; if (!d || S.ending) return;
-        S.callStatus = d.status; if (d.status === 'ringing' && !S.ringing) { S.ringing = true; paint(); }
+        S.callStatus = d.status;
+        if (d.status === 'active') { pickedUp(); return; }
+        // "Ringing…" + ringback once their device is online; "Calling…" + dial tone until then (never back to dialing)
+        if (ROLE === 'caller' && d.status === 'ringing' && d.peer_online && !S.ringing) { S.ringing = true; if (tones && tones.ringing) tones.ringing(); paint(); }
         if (['declined', 'missed', 'cancelled', 'ended'].indexOf(d.status) > -1 && !others().length) endedBecause(d.status);
       }).catch(noop);
-    }, 2000);
+    };
+    S.ringWatch = setInterval(look, 2000); look();
   }
   function endedBecause(status) {
     var caller = ROLE === 'caller';
-    finish(status === 'declined' ? 'Call declined' : status === 'missed' ? (caller ? 'No answer' : 'Missed call') : status === 'cancelled' ? 'Call cancelled' : 'Call ended');
+    // declined -> "Call declined"; unanswered -> "No answer" (caller) / "Missed call" (callee); a caller who hung up while it rang is a missed call for the callee
+    finish(status === 'declined' ? 'Call declined' : status === 'missed' ? (caller ? 'No answer' : 'Missed call') : status === 'cancelled' && !caller ? 'Missed call' : 'Call ended');
   }
   function remoteEnded() {
     if (S.ending) return;
@@ -323,10 +337,10 @@
   /** the red button: ends the call for both people (cancels it while it is still ringing) */
   function hangUp(text) {
     if (S.ending) return;
-    var wasConnected = !!S.connectedAt, pid = S.pid, pending;
+    var pid = S.pid, pending;
     if (pid) pending = retry(function () { return api('POST', '/leave', { pid: pid }, true); });
     else if (CALL_ID) pending = retry(function () { return req('POST', FR + '/calls/' + CALL_ID + '/end', null, true); });
-    finish(typeof text === 'string' ? text : (ROLE === 'caller' && !wasConnected ? 'Call cancelled' : 'Call ended'), pending);
+    finish(typeof text === 'string' ? text : 'Call ended', pending);
   }
   window.addEventListener('pagehide', function () {
     if (S.ending) return;
@@ -352,7 +366,31 @@
       finish('Could not reach the server. Check your connection.');
     });
   }
+  /** my own picture: drag it anywhere, it settles on the nearer side (like the app) */
+  function dragSelf() {
+    var box = $('cl-self'), sx = 0, sy = 0, ox = 0, oy = 0, moving = false;
+    box.onpointerdown = function (e) {
+      var r = box.getBoundingClientRect(); sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top; moving = true; box.classList.add('drag');
+      try { box.setPointerCapture(e.pointerId); } catch (x) {}
+    };
+    box.onpointermove = function (e) {
+      if (!moving) return;
+      var w = box.offsetWidth, h = box.offsetHeight;
+      box.style.left = Math.min(Math.max(8, ox + e.clientX - sx), window.innerWidth - w - 8) + 'px';
+      box.style.top = Math.min(Math.max(8, oy + e.clientY - sy), window.innerHeight - h - 8) + 'px'; box.style.right = 'auto';
+    };
+    box.onpointerup = box.onpointercancel = function () {
+      if (!moving) return; moving = false; box.classList.remove('drag');
+      var r = box.getBoundingClientRect(); box.style.left = (r.left + r.width / 2 < window.innerWidth / 2 ? 8 : window.innerWidth - r.width - 8) + 'px';
+    };
+  }
   function start() {
+    dragSelf();
+    document.addEventListener('keydown', function (e) {      // M = mute, V = camera
+      var tag = e.target && e.target.tagName;
+      if (S.ending || e.ctrlKey || e.metaKey || e.altKey || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'm' || e.key === 'M') toggleMic(); else if (e.key === 'v' || e.key === 'V') toggleCam();
+    });
     setAvatar($('cl-av'), PEER); $('cl-name').textContent = PEER.name; paint();
     $('cl-mic').onclick = toggleMic; $('cl-cam').onclick = toggleCam; $('cl-end').onclick = function () { hangUp(); };
     document.addEventListener('click', unlockSound, true); document.addEventListener('keydown', unlockSound, true); document.addEventListener('touchstart', unlockSound, true);

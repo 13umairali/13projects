@@ -243,8 +243,8 @@
 <?php unset($__componentOriginalb8f3412e81216ee46c67af92ce4627c8); ?>
 <?php endif; ?>
 
-    <script src="<?php echo e(asset('js/call-tones.js')); ?>?v=20261014" defer></script>
-    <script src="<?php echo e(asset('js/friend-call.js')); ?>?v=20261014-media" defer></script>
+    <script src="<?php echo e(asset('js/call-tones.js')); ?>?v=20261021-sounds" defer></script>
+    <script src="<?php echo e(asset('js/friend-call.js')); ?>?v=20261021-saas" defer></script>
     <script src="<?php echo e(asset('js/friend-chat.js')); ?>?v=20261013-lifecycle" defer></script>
  <?php echo $__env->renderComponent(); ?>
 <?php endif; ?>

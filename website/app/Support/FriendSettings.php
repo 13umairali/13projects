@@ -80,17 +80,19 @@ class FriendSettings
 
         $cached = Cache::get('cf_turn_ice');
         if (is_array($cached) && $cached) return $cached;
+        if (Cache::get('cf_turn_down')) return [];   // failed a moment ago: do not make every request wait for the 3 s timeout again
 
         try {
             $r = Http::withToken($token)->acceptJson()->timeout(3)
                 ->post("https://rtc.live.cloudflare.com/v1/turn/keys/{$id}/credentials/generate", ['ttl' => 86400]);
             if (!$r->successful()) {
                 Log::warning('Cloudflare TURN credentials failed', ['status' => $r->status()]);
+                Cache::put('cf_turn_down', 1, 60);
                 return [];
             }
 
             $ice = $r->json('iceServers');
-            if (!is_array($ice) || !$ice) return [];
+            if (!is_array($ice) || !$ice) { Cache::put('cf_turn_down', 1, 60); return []; }
             if (isset($ice['urls'])) $ice = [$ice];   // the API returns one object; WebRTC wants a list
 
             foreach ($ice as &$s) {                   // port 53 is blocked by Chrome and only slows ICE down
@@ -102,6 +104,7 @@ class FriendSettings
             return $ice;
         } catch (\Throwable $e) {
             Log::warning('Cloudflare TURN credentials unavailable', ['error' => $e->getMessage()]);
+            Cache::put('cf_turn_down', 1, 60);
             return [];
         }
     }

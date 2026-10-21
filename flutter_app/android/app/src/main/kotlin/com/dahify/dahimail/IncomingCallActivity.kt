@@ -86,9 +86,11 @@ class IncomingCallActivity : Activity() {
             window.isNavigationBarContrastEnforced = false
             root.isForceDarkAllowed = false
         }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+        // Insets pad the scrolling content only; the blurred backdrop stays edge to edge.
+        val scroll = findViewById<View>(R.id.incoming_scroll)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            scroll.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
         ViewCompat.requestApplyInsets(root)

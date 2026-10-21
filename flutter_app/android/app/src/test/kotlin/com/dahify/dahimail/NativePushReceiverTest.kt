@@ -414,10 +414,19 @@ class NativePushReceiverTest {
         assertEquals("Incoming Meeting…", activity.findViewById<TextView>(R.id.incoming_status).text)
         assertEquals("AE", activity.findViewById<TextView>(R.id.incoming_initials).text)
         val root = activity.findViewById<View>(R.id.incoming_root)
-        assertEquals(0xff111118.toInt(), (root.background as android.graphics.drawable.ColorDrawable).color)
+        assertEquals(0xff0B141A.toInt(), (root.background as android.graphics.drawable.ColorDrawable).color)
         assertEquals(View.LAYOUT_DIRECTION_LTR, activity.findViewById<View>(R.id.incoming_actions).layoutDirection)
         val density = activity.resources.displayMetrics.density
-        assertEquals((112 * density).toInt(), activity.findViewById<ImageView>(R.id.incoming_avatar).width)
+        // Sizes and order mirror IncomingCallView: 160 dp picture with ripples, 70 dp buttons, name above the picture.
+        assertEquals((160 * density).toInt(), activity.findViewById<ImageView>(R.id.incoming_avatar).width)
+        assertEquals((304 * density).toInt(), activity.findViewById<View>(R.id.incoming_avatar_area).width)
+        assertEquals(3, listOf(R.id.incoming_ripple_0, R.id.incoming_ripple_1, R.id.incoming_ripple_2).count { activity.findViewById<View?>(it) != null })
+        assertNotNull(activity.findViewById<View>(R.id.incoming_backdrop))
+        val namePosition = IntArray(2).also { activity.findViewById<View>(R.id.incoming_name).getLocationOnScreen(it) }
+        val avatarPosition = IntArray(2).also { activity.findViewById<View>(R.id.incoming_avatar).getLocationOnScreen(it) }
+        assertTrue(namePosition[1] < avatarPosition[1])
+        assertEquals(0xff25D366.toInt(), activity.getColor(R.color.incoming_accept))
+        assertEquals(0xffF15C6D.toInt(), activity.getColor(R.color.incoming_decline))
         assertEquals((70 * density).toInt(), activity.findViewById<ImageButton>(R.id.incoming_accept).width)
         controller.pause().stop().destroy()
     }

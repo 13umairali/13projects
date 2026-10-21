@@ -27,6 +27,6 @@
             @endforelse
         </div>
     </div>
-    <script src="{{ asset('js/call-tones.js') }}?v=20261014" defer></script>
-    <script src="{{ asset('js/friend-call.js') }}?v=20261014-media" defer></script>
+    <script src="{{ asset('js/call-tones.js') }}?v=20261021-sounds" defer></script>
+    <script src="{{ asset('js/friend-call.js') }}?v=20261021-saas" defer></script>
 </x-layouts.app>

@@ -12,6 +12,7 @@ import 'app_permissions.dart';
 import 'call_audio.dart';
 import 'call_tones.dart';
 import 'rtc_local_tracks.dart';
+import 'signal_sender.dart';
 
 typedef MJson = Map<String, dynamic>;
 
@@ -28,6 +29,10 @@ class MeetingPeer {
   final remoteMedia = RemoteMedia();
   bool get hasVideo => remoteMedia.hasVideo;
   final queue = <RTCIceCandidate>[];
+  /// ICE restarts already tried, whether this connection only uses the TURN relay, and the recovery / watchdog timers.
+  int restarts = 0;
+  bool relayOnly = false;
+  Timer? recoverTimer, connectTimer;
   MeetingPeer(this.pid);
 }
 
@@ -194,14 +199,38 @@ class MeetingEngine extends ChangeNotifier {
   List<dynamic> _ice = [];
   int _sigLast = 0, _chatLast = 0;
   Timer? _loop, _statusLoop;
+
+  // ───── timeline: copy the [RTC-TIME] lines from the log to see where the seconds go ─────
+  final Stopwatch _sw = Stopwatch();
+  void _t(String what) => debugPrint('[RTC-TIME] ${_sw.elapsedMilliseconds}ms $what');
+
+  /// While a call is being set up the room is polled every 350 ms (a 1 s timer added up to a second of waiting at
+  /// EVERY hop: offer, answer, candidates). Once connected it goes back to 1 s. Bounded to 25 s after joining or
+  /// after a new connection is started, so a stuck peer cannot keep the server busy.
+  DateTime _fastUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  bool get _negotiating {
+    if (phase != 'in' || DateTime.now().isAfter(_fastUntil)) return false;
+    if (peers.isEmpty) return isCall && _accepted && !_mediaConnected;
+    return peers.values.any((p) => p.pc?.connectionState != RTCPeerConnectionState.RTCPeerConnectionStateConnected);
+  }
+
+  void _scheduleLoop() {
+    _loop?.cancel();
+    if (_closed) return;
+    _loop = Timer(_negotiating ? const Duration(milliseconds: 350) : const Duration(seconds: 1), () {
+      _poll().whenComplete(_scheduleLoop);
+    });
+  }
   bool _checkingStatus = false, _accepted = false;
 
   void _callState(String? status) {
     if (_closed || status == null) return;
     if (status == "active") {
+      final first = !_accepted;
       _accepted = true;
       _tones.accepted();
       _statusLoop?.cancel();
+      if (first) { _t('call accepted by the other side'); _fastUntil = DateTime.now().add(const Duration(seconds: 25)); _scheduleLoop(); }
       notifyListeners();
     } else if (const ["declined", "cancelled", "missed", "ended"].contains(status)) {
       // Same wording as the one-to-one call screen: the caller sees "No answer", the callee "Missed call".
@@ -425,25 +454,31 @@ class MeetingEngine extends ChangeNotifier {
   // ───────────── join ─────────────
   Future<void> join({required bool audio, required bool video, int? answerCallId}) async {
     if (phase == 'joining' || phase == 'in' || phase == 'waiting') return;
+    _sw..reset()..start();
+    _t('join started (realtime socket ${Realtime.I.isConnected ? 'CONNECTED' : 'NOT connected -> slow polling'})');
     phase = 'joining';
     message = null;
     notifyListeners();
     _realtime ??= Realtime.I.events.listen(_live);
+    // Answering a call: open the microphone WHILE the server confirms the answer (they used to run one after the other).
+    final earlyPreview = answerCallId != null ? startPreview(wantVideo: video) : null;
     if (answerCallId != null) {
       _accepted = true;
       _tones.accepted();
       try {
         await api.post('calls/$answerCallId/answer');
+        _t('answer confirmed by server');
         if (_closed) { await api.post('calls/$answerCallId/end'); return; }
       } catch (e) {
         if (_closed) return;
         phase = 'error';
         message = e is ApiException ? e.message : 'Could not answer the call.';
+        await _release();
         notifyListeners();
         return;
       }
     }
-    if (!await startPreview(wantVideo: video)) {
+    if (!await (earlyPreview ?? startPreview(wantVideo: video))) {
       if (_local == null) {
         phase = 'error';
         notifyListeners();
@@ -451,6 +486,7 @@ class MeetingEngine extends ChangeNotifier {
       }
     }
     if (_closed) return;
+    _t('microphone / camera ready');
     micOn = audio && _local != null;
     camOn = video && hasVideoTrack;
     _applyTracks();
@@ -462,6 +498,7 @@ class MeetingEngine extends ChangeNotifier {
         await api.post('meetings/$code/leave', {'pid': d['pid']});
         return;
       }
+      _t('join confirmed by server');
       pid = (d['pid'] as num).toInt();
       role = '${d['role'] ?? 'participant'}';
       meeting = Map<String, dynamic>.from(d['meeting'] as Map? ?? {});
@@ -479,9 +516,10 @@ class MeetingEngine extends ChangeNotifier {
       _callState(meeting['call_status'] as String?);
       if (_closed) return;
       if (isCall && role == 'host' && !_accepted) {
-        _statusLoop = Timer.periodic(const Duration(milliseconds: 500), (_) => _checkCallState());
+        _statusLoop = Timer.periodic(const Duration(seconds: 1), (_) => _checkCallState());
       }
-      _loop = Timer.periodic(const Duration(seconds: 1), (_) => _poll());
+      _fastUntil = DateTime.now().add(const Duration(seconds: 25));
+      _scheduleLoop();
       _poll();
     } on ApiException catch (e) {
       phase = 'error';
@@ -587,17 +625,20 @@ class MeetingEngine extends ChangeNotifier {
     }));
   }
 
-  Future<MeetingPeer?> _makePeer(int id, {required bool offerer}) async {
+  Future<MeetingPeer?> _makePeer(int id, {required bool offerer, bool relay = false}) async {
     if (_closed) return null;
-    final p = MeetingPeer(id)..offerer = offerer;
+    final p = MeetingPeer(id)..offerer = offerer..relayOnly = relay;
     peers[id] = p;
+    _fastUntil = DateTime.now().add(const Duration(seconds: 25));
+    _t('peer $id creating (${offerer ? 'I send the offer' : 'I answer'}${relay ? ', relay only' : ''})');
     try {
       await p.renderer.initialize();
       p.rendererReady = true;
       if (_closed || peers[id] != p) { await p.renderer.dispose(); p.rendererReady = false; return null; }
-      final pc = await createPeerConnection({'iceServers': _ice, 'sdpSemantics': 'unified-plan'});
+      final pc = await createPeerConnection(_rtcConfig(relay: relay));
       if (_closed || peers[id] != p) { await pc.close(); return null; }
       p.pc = pc;
+      _t('peer $id connection object ready');
       // Only the side that SENDS the offer adds its tracks up front. A transceiver made with addTransceiver() is not
       // reused for an incoming offer (only addTrack() ones are), so on the answering side a pre-added microphone is
       // left out of the answer and the other person hears nothing. The answering side attaches its tracks right
@@ -644,11 +685,14 @@ class MeetingEngine extends ChangeNotifier {
         }
       }
       debugPrint('[RTC-DIAG][meeting peer $id] local audio=${_local?.getAudioTracks().length ?? 0} video=${_local?.getVideoTracks().length ?? 0} audioEnabled=${_local?.getAudioTracks().map((t) => t.enabled).toList()}');
+      var firstCandidate = true;
       pc.onIceCandidate = (RTCIceCandidate c) {
+        if (firstCandidate && c.candidate != null) { firstCandidate = false; _t('peer $id first local candidate: ${(c.candidate!.split(' typ ').length > 1 ? c.candidate!.split(' typ ')[1].split(' ')[0] : '?')}'); }
         if (c.candidate != null) _send(id, 'ice', {'candidate': c.candidate, 'sdpMid': c.sdpMid, 'sdpMLineIndex': c.sdpMLineIndex});
       };
       pc.onIceConnectionState = (RTCIceConnectionState state) {
         debugPrint('[RTC-DIAG][meeting peer $id] ICE=$state');
+        _t('peer $id ICE=$state');
       };
       pc.onTrack = (RTCTrackEvent e) {
         debugPrint('[RTC-DIAG][meeting peer $id] remote track kind=${e.track.kind} enabled=${e.track.enabled} streams=${e.streams.length}');
@@ -674,6 +718,10 @@ class MeetingEngine extends ChangeNotifier {
       pc.onConnectionState = (RTCPeerConnectionState s) {
         debugPrint('[RTC-DIAG][meeting peer $id] peer=$s');
         if (s == RTCPeerConnectionState.RTCPeerConnectionStateConnected && peers[id] == p && !_closed) {
+          p.recoverTimer?.cancel();
+          p.connectTimer?.cancel();
+          _t('peer $id CONNECTED');
+          unawaited(logRtcSelectedPair(pc, 'meeting peer $id'));
           _mediaConnected = true;
           connectedAt ??= DateTime.now();
           _tones.connected();
@@ -681,15 +729,52 @@ class MeetingEngine extends ChangeNotifier {
           unawaited(audio.apply().catchError((_) {}));
           _startPeerStats(p, pc);
         }
+        if (s == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected && peers[id] == p && !_closed) {
+          // often a short network change: give it 4 s to come back by itself, then restart ICE
+          p.recoverTimer?.cancel();
+          p.recoverTimer = Timer(const Duration(seconds: 4), () => unawaited(_recoverPeer(p)));
+        }
         if (s == RTCPeerConnectionState.RTCPeerConnectionStateFailed && peers[id] == p && !_closed) {
-          _dropPeer(id).then((_) => notifyListeners()); // the next poll builds a fresh connection
+          unawaited(_recoverPeer(p));
         }
       };
+      // Watchdog: still not connected after 10 s on the normal route -> retry through the TURN relay only.
+      p.connectTimer = Timer(const Duration(seconds: 10), () => unawaited(_relayFallback(p)));
       return p;
     } catch (_) {
       if (peers[id] == p) await _dropPeer(id);
       return null;
     }
+  }
+
+  /// Offering side: restart ICE on the same connection (up to 2 times, no new peer, no new permissions).
+  /// Answering side: after a failure build a fresh peer; the offering side's next offer completes it.
+  Future<void> _recoverPeer(MeetingPeer p) async {
+    if (_closed || peers[p.pid] != p || p.pc == null) return;
+    if (p.pc!.connectionState == RTCPeerConnectionState.RTCPeerConnectionStateConnected) return;
+    if (p.offerer && p.restarts < 2) {
+      p.restarts++;
+      await _offer(p.pid, iceRestart: true);
+      return;
+    }
+    if (p.offerer && p.restarts >= 2 && await _relayFallback(p, force: true)) return;
+    if (p.pc!.connectionState == RTCPeerConnectionState.RTCPeerConnectionStateFailed || p.offerer) {
+      await _dropPeer(p.pid);
+      notifyListeners(); // the next poll builds a fresh connection
+    }
+  }
+
+  /// Rebuild this connection so that only the TURN relay is used. Works on networks where direct paths never connect.
+  Future<bool> _relayFallback(MeetingPeer p, {bool force = false}) async {
+    if (_closed || peers[p.pid] != p || !p.offerer || p.relayOnly || !_hasTurn) return false;
+    if (!force && p.pc?.connectionState == RTCPeerConnectionState.RTCPeerConnectionStateConnected) return false;
+    debugPrint('[RTC-DIAG][meeting peer ${p.pid}] retrying through the TURN relay only');
+    final id = p.pid;
+    await _dropPeer(id);
+    final n = await _makePeer(id, offerer: true, relay: true);
+    if (n == null) return false;
+    await _offer(id);
+    return true;
   }
 
   void _startPeerStats(MeetingPeer peer, RTCPeerConnection pc) {
@@ -715,6 +800,8 @@ class MeetingEngine extends ChangeNotifier {
     final p = peers.remove(id);
     if (p == null) return;
     p.statsTimer?.cancel();
+    p.recoverTimer?.cancel();
+    p.connectTimer?.cancel();
     final ready = p.rendererReady;
     p.rendererReady = false;
     p.hasStream = false;
@@ -727,21 +814,40 @@ class MeetingEngine extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Offers / answers go out at once; ICE candidates are batched and every request is retried (see SignalSender).
+  late final _sender = SignalSender(
+    batch: (items) async { await api.post('meetings/$code/signals', {'pid': pid, 'items': items}); },
+    single: (i) async { await api.post('meetings/$code/signal', {'pid': pid, ...i}); },
+  );
+
   Future<void> _send(int to, String type, Map<String, dynamic> payload) async {
-    try {
-      await api.post('meetings/$code/signal', {'pid': pid, 'to': to, 'type': type, 'payload': jsonEncode(payload)});
-    } catch (_) {}
+    _sender.add({'to': to, 'type': type, 'payload': jsonEncode(payload)}, immediate: type != 'ice');
   }
 
-  Future<void> _offer(int id) async {
+  /// WebRTC settings. A single bundled transport halves the connectivity checks; a small candidate pool lets the
+  /// phone start gathering (STUN / TURN) before the offer exists. [relay] = use only the TURN relay.
+  Map<String, dynamic> _rtcConfig({bool relay = false}) => {
+    'iceServers': _ice,
+    'sdpSemantics': 'unified-plan',
+    'bundlePolicy': 'max-bundle',
+    'rtcpMuxPolicy': 'require',
+    'iceCandidatePoolSize': 2,
+    if (relay) 'iceTransportPolicy': 'relay',
+  };
+
+  bool get _hasTurn => _ice.any((s) => s is Map && ((s['urls'] is List ? s['urls'] as List : [s['urls']]).any((u) => '$u'.startsWith('turn'))));
+
+  Future<void> _offer(int id, {bool iceRestart = false}) async {
     final p = peers[id];
     final pc = p?.pc;
     if (pc == null) return;
     try {
+      if (iceRestart) { try { await pc.restartIce(); } catch (_) {} }
       final o = await pc.createOffer({'offerToReceiveAudio': 1, 'offerToReceiveVideo': 1});
       debugPrint('[RTC-DIAG][meeting peer $id] offer hasAudio=${o.sdp?.contains('m=audio') ?? false} hasVideo=${o.sdp?.contains('m=video') ?? false}');
       await pc.setLocalDescription(o);
-      await _send(id, 'offer', {'type': o.type, 'sdp': o.sdp});
+      await _send(id, 'offer', {'type': o.type, 'sdp': o.sdp, if (iceRestart) 'restart': true});
+      _t('peer $id offer sent');
     } catch (_) {}
   }
 
@@ -755,10 +861,13 @@ class MeetingEngine extends ChangeNotifier {
     try {
       if (type == 'offer') {
         // a fresh offer replaces an old connection (the other person reconnected)
-        if (peers.containsKey(from) && (peers[from]!.remoteSet || peers[from]!.offerer)) await _dropPeer(from);
+        final existing = peers[from];
+        final reuse = d['restart'] == true && existing?.pc != null && existing!.remoteSet && !existing.offerer; // ICE restart: keep the connection
+        if (!reuse && existing != null && (existing.remoteSet || existing.offerer)) await _dropPeer(from);
         final p = peers[from] ?? await _makePeer(from, offerer: false);
         final pc = p?.pc;
         if (p == null || pc == null) return;
+        _t('peer $from offer received');
         await pc.setRemoteDescription(RTCSessionDescription(d['sdp'] as String?, d['type'] as String?));
         p.remoteSet = true;
         await _attachLocal(p); // answering side: our microphone / camera go on the transceivers the offer created
@@ -770,6 +879,7 @@ class MeetingEngine extends ChangeNotifier {
       } else if (type == 'answer') {
         final p = peers[from];
         if (p?.pc == null) return;
+        _t('peer $from answer received');
         await p!.pc!.setRemoteDescription(RTCSessionDescription(d['sdp'] as String?, d['type'] as String?));
         p.remoteSet = true;
         await _flush(p);
@@ -972,6 +1082,7 @@ class MeetingEngine extends ChangeNotifier {
     _loop?.cancel();
     _statusLoop?.cancel();
     _realtime?.cancel();
+    _sender.close();
     unawaited(_recorder.finish().catchError((_) { recNotice = 'Recording could not be uploaded. The audio file remains saved on this phone.'; }));
     if (_preview != null) await _preview;
     for (final id in peers.keys.toList()) {

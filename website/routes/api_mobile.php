@@ -185,6 +185,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api'])->group(functio
     Route::post('meetings/{code}/join', [\App\Http\Controllers\Meetings\MeetingController::class, 'join']);
     Route::get('meetings/{code}/poll', [\App\Http\Controllers\Meetings\MeetingController::class, 'poll']);
     Route::post('meetings/{code}/signal', [\App\Http\Controllers\Meetings\MeetingController::class, 'signal']);
+    Route::post('meetings/{code}/signals', [\App\Http\Controllers\Meetings\MeetingController::class, 'signals']);
     Route::post('meetings/{code}/state', [\App\Http\Controllers\Meetings\MeetingController::class, 'state']);
     Route::post('meetings/{code}/chat', [\App\Http\Controllers\Meetings\MeetingController::class, 'chat']);
     Route::post('meetings/{code}/host', [\App\Http\Controllers\Meetings\MeetingController::class, 'host']);

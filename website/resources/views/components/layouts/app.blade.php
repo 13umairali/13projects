@@ -995,8 +995,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         <script>window.DAHI_PUSH = @json(['vapid' => $__fcm['web_vapid_key'], 'config' => $__fcm['web_config']]);</script>
         <script src="{{ asset('js/dahi-push.js') }}?v=20261007" defer></script>
     @endif
-    <script src="{{ asset('js/call-tones.js') }}?v=20261014" defer></script>
-    <script src="{{ asset('js/friend-call.js') }}?v=20261014-media" defer></script>
+    <script src="{{ asset('js/call-tones.js') }}?v=20261021-sounds" defer></script>
+    <script src="{{ asset('js/friend-call.js') }}?v=20261021-saas" defer></script>
 @endauth
     @include('partials.timezone-sync')
 </body>

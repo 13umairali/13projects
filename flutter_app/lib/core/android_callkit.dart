@@ -161,7 +161,7 @@ class AndroidCallKit {
       duration: remaining.clamp(1000, 45000), extra: data,
       missedCallNotification: const NotificationParams(showNotification: false),
       android: const AndroidParams(isCustomNotification: true, isShowFullLockedScreen: true,
-        isShowCallID: true, isShowLogo: true, logoUrl: Brand.logoAsset, backgroundColor: '#111118', actionColor: '#16A34A',
+        isShowCallID: true, isShowLogo: true, logoUrl: Brand.logoAsset, backgroundColor: '#0B141A', actionColor: '#25D366',
         ringtonePath: NotifSound.incomingCall, textAccept: 'Accept', textDecline: 'Decline',
         incomingCallNotificationChannelName: 'Incoming calls', missedCallNotificationChannelName: 'Missed calls'),
     ));

@@ -160,12 +160,34 @@ test('host departure promotes the cohost and preserves end-for-everyone authorit
     expect(DB::table('meetings')->value('status'))->toBe('ended');
 });
 
-test('two-person regular meetings end for both and close outstanding invitations', function () {
+test('a two-person regular meeting keeps running for the person left and ends with the last one', function () {
+    // Zoom / Meet / Teams rule: only a one-to-one CALL ends when either person hangs up.
     DB::table('meetings')->update(['kind' => 'meeting']);
     DB::table('meeting_participants')->where('id', 13)->delete();
-    app(MeetingService::class)->leave(DB::table('meeting_participants')->find(12));
+    $svc = app(MeetingService::class);
+    $svc->leave(DB::table('meeting_participants')->find(12));
+    expect(DB::table('meetings')->value('status'))->toBe('live');
+    expect(DB::table('meeting_participants')->where('status', 'joined')->pluck('id')->all())->toBe([11]);
+    expect(DB::table('meeting_participants')->where('id', 11)->value('role'))->toBe('host');
+    $svc->leave(DB::table('meeting_participants')->find(11));
     expect(DB::table('meetings')->value('status'))->toBe('ended');
     expect(DB::table('friend_calls')->whereIn('status', ['active', 'ringing'])->count())->toBe(0);
+});
+
+test('when the host leaves a two-person meeting the other person becomes host', function () {
+    DB::table('meetings')->update(['kind' => 'meeting']);
+    DB::table('meeting_participants')->where('id', 13)->delete();
+    app(MeetingService::class)->leave(DB::table('meeting_participants')->find(11));
+    expect(DB::table('meetings')->value('status'))->toBe('live');
+    expect(DB::table('meeting_participants')->where('id', 12)->value('role'))->toBe('host');
+});
+
+test('a guest name is cleaned and capped before it is shown to everyone', function () {
+    DB::table('meetings')->update(['kind' => 'meeting', 'allow_guests' => 1, 'waiting_room' => 1]);
+    [$ok, , $guest] = app(MeetingService::class)->join(null, "  <b>Very</b>\n   long ".str_repeat('x', 200), 'testroom', true, false);
+    expect($ok)->toBeTrue();
+    expect(mb_strlen($guest['name']))->toBeLessThanOrEqual(60);
+    expect($guest['name'])->toStartWith('Very long ')->not->toContain('<b>');
 });
 
 test('a waiting guest leaving does not close a two-person meeting', function () {
