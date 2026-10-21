@@ -9,7 +9,10 @@ return new class extends Migration {
     {
         if (!Schema::hasColumn('users', 'last_login_ip')) {
             Schema::table('users', function (Blueprint $table) {
-                $table->string('last_login_ip', 45)->nullable()->after('signup_ip');
+                // No ->after('signup_ip'): that column is added by the later
+                // add_username_and_mailbox_fields migration, so referencing it
+                // here made a fresh install fail on this migration.
+                $table->string('last_login_ip', 45)->nullable();
             });
         }
     }

@@ -69,4 +69,4 @@
 
 </body>
 </html>
-<?php /**PATH /home/dahimail.com/public_html/resources/views/errors/500.blade.php ENDPATH**/ ?>
+<?php /**PATH /app/resources/views/errors/500.blade.php ENDPATH**/ ?>

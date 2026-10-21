@@ -1,0 +1,252 @@
+# Base44 sandbox environment for the Dahimail monorepo.
+#
+#   website/     Laravel 12 app (web UI + API) — runs here, previews on port 3000
+#   flutter_app/ Flutter mobile client (Android/iOS) — needs an emulator and is
+#                not part of this stack.
+#
+# Every app service runs the bind-mounted source with a dev command, so edits
+# are visible without rebuilding an image. Application config is injected as
+# environment variables (Laravel's immutable Dotenv lets real env vars win over
+# .env); the repo's .env only ever holds the generated APP_KEY.
+#
+# Shell `$` inside command blocks is written `$$` — Compose interpolates `$VAR`
+# in this file, so `$$` is what reaches the shell.
+#
+# Usage:  docker compose -f docker-compose.base44.yml up -d --build
+name: dahimail
+
+# Shared Laravel/runtime configuration for the PHP services.
+x-app-environment: &app-environment
+  # ── Laravel ──────────────────────────────────────────────────────────
+  APP_NAME: DahiMail
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_URL: https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+  INSTALLED: "1"                       # skips the web installer (storage/installed also exists)
+  LOG_CHANNEL: stack
+  # ── local infrastructure: credentials generated for this sandbox ─────
+  DB_CONNECTION: mysql
+  DB_HOST: db
+  DB_PORT: "3306"
+  DB_DATABASE: dahimail
+  DB_USERNAME: dahimail
+  DB_PASSWORD: dahimail_dev
+  SESSION_DRIVER: database
+  CACHE_STORE: database
+  QUEUE_CONNECTION: database
+  MAIL_MAILER: log                     # outbound mail is written to storage/logs, nothing is sent
+  BROADCAST_CONNECTION: log
+  FILESYSTEM_DISK: local
+  # ── seeded dev logins (AdminSeeder / DemoUserSeeder) ─────────────────
+  ADMIN_EMAIL: admin@mailtrixy.com
+  ADMIN_PASSWORD: password123
+  DEMO_EMAIL: demo@mailtrixy.com
+  DEMO_PASSWORD: "12345678"
+  # Laravel's artisan serve runs PHP's built-in server: give it a few workers
+  # so page assets are not fetched serially.
+  PHP_CLI_SERVER_WORKERS: "4"
+
+# The PHP services share one image, the source bind mount and the vendor volume.
+x-php-service: &php-service
+  build:
+    context: .
+    dockerfile: .base44/Dockerfile.php
+  working_dir: /app
+  volumes:
+    - ./website:/app
+    - composer-vendor:/app/vendor          # composer install writes here (see the setup service)
+  env_file:
+    - /run/base44/app.env                  # platform-managed secrets, always last
+  environment: *app-environment
+
+services:
+  db:
+    image: mariadb:11
+    restart: on-failure
+    environment:
+      MARIADB_DATABASE: dahimail
+      MARIADB_USER: dahimail
+      MARIADB_PASSWORD: dahimail_dev
+      MARIADB_ROOT_PASSWORD: dahimail_root
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    labels:
+      base44.project: "Database (MariaDB)"
+      base44.kind: infra
+
+  assets:
+    image: node:22-bookworm-slim
+    restart: on-failure
+    working_dir: /app
+    volumes:
+      - ./website:/app
+      - node-modules:/app/node_modules      # npm install writes here
+    command:
+      - sh
+      - -ec
+      - |
+        lock=node_modules/.base44-lock-hash
+        want=$$(sha256sum package-lock.json | cut -d' ' -f1)
+        if [ ! -x node_modules/.bin/vite ] || [ "$$(cat "$$lock" 2>/dev/null)" != "$$want" ]; then
+          echo 'assets: installing npm dependencies from package-lock.json'
+          npm ci --no-audit --no-fund
+          printf '%s' "$$want" > "$$lock"
+        fi
+        exec npx vite build --watch
+    healthcheck:
+      test: ["CMD-SHELL", "test -f public/build/manifest.json || test -f public/build/.vite/manifest.json || { echo 'assets: vite build manifest missing'; exit 1; }"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 150s
+    labels:
+      base44.project: "Vite asset watcher"
+      base44.kind: worker
+
+  # One-shot: dependencies, APP_KEY, migrations and seed data. Runs once per
+  # fresh volume/container; re-run it by hand after adding a migration:
+  #   docker compose -f docker-compose.base44.yml run --rm setup
+  setup:
+    <<: *php-service
+    command:
+      - sh
+      - -ec
+      - |
+        lock=vendor/.base44-lock-hash
+        want=$$(sha256sum composer.lock | cut -d' ' -f1)
+        if [ ! -f vendor/autoload.php ] || [ "$$(cat "$$lock" 2>/dev/null)" != "$$want" ]; then
+          echo 'setup: composer install'
+          composer install --no-interaction --no-progress --prefer-dist --no-scripts
+          php artisan package:discover --ansi
+          printf '%s' "$$want" > "$$lock"
+        fi
+
+        # .env only ever holds the generated APP_KEY — everything else comes
+        # from this file's environment block. key:generate needs the key's line
+        # to exist, so seed the file with an empty one.
+        if [ ! -f .env ]; then : > .env; fi
+        if ! grep -q '^APP_KEY=' .env; then printf 'APP_KEY=\n' >> .env; fi
+        if ! grep -q '^APP_KEY=base64:' .env; then
+          echo 'setup: generating APP_KEY'
+          php artisan key:generate --force
+        fi
+        if ! grep -q '^APP_KEY=base64:' .env; then
+          echo 'setup: no APP_KEY in .env — cannot start (encryption would fail)'; exit 1
+        fi
+
+        php artisan storage:link >/dev/null 2>&1 || true
+        php artisan config:clear >/dev/null
+
+        # A few incremental migrations re-create objects the consolidated
+        # 0001_01_01_* migrations already made (e.g. email_signatures). The app's
+        # own web installer reacts to that by skipping the duplicate, so do the
+        # same: mark it as migrated and carry on. Any other failure stops setup.
+        echo 'setup: migrations'
+        attempt=0
+        while :; do
+          attempt=$$((attempt + 1))
+          if out=$$(php artisan migrate --force 2>&1); then
+            printf '%s\n' "$$out" | tail -3
+            break
+          fi
+          printf '%s\n' "$$out" | tail -25
+          case "$$out" in
+            *"already exists"*|*"Duplicate column"*|*"Duplicate key"*) ;;
+            *) echo 'setup: migration failed — see the output above'; exit 1 ;;
+          esac
+          file=$$(printf '%s\n' "$$out" | grep -oE 'database/migrations/[A-Za-z0-9_]+\.php' | tail -1)
+          if [ -z "$$file" ] || [ "$$attempt" -ge 40 ]; then
+            echo 'setup: could not resolve the duplicate-object migration'; exit 1
+          fi
+          name=$$(basename "$$file" .php)
+          echo "setup: $$name re-creates an object an earlier migration already made — marking it migrated without running it"
+          MIGRATION_NAME="$$name" php -r 'try { $$p = new PDO("mysql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE"), getenv("DB_USERNAME"), getenv("DB_PASSWORD")); $$b = (int) $$p->query("select coalesce(max(batch),1) from migrations")->fetchColumn(); $$s = $$p->prepare("insert into migrations (migration, batch) values (?, ?)"); $$s->execute([getenv("MIGRATION_NAME"), $$b]); } catch (Throwable $$e) { fwrite(STDERR, $$e->getMessage()."\n"); exit(1); }'
+        done
+
+        # Seeding is guarded by a sentinel row so a partially-seeded database
+        # (setup interrupted half-way) is completed on the next run instead of
+        # being skipped, and a fully-seeded one is left alone.
+        seeded=$$(php -r 'try { $$p = new PDO("mysql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE"), getenv("DB_USERNAME"), getenv("DB_PASSWORD")); $$s = $$p->prepare("select count(*) from system_settings where `key` = ?"); $$s->execute(["base44_seed_done"]); echo (int) $$s->fetchColumn(); } catch (Throwable $$e) { echo 0; }')
+        if [ "$$seeded" = "0" ]; then
+          echo 'setup: seeding baseline data (roles, plans, templates, pages, admin + demo account)'
+          php artisan db:seed --force
+          php -r 'try { $$p = new PDO("mysql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE"), getenv("DB_USERNAME"), getenv("DB_PASSWORD")); $$now = date("Y-m-d H:i:s"); $$s = $$p->prepare("insert into system_settings (`key`, value, `group`, created_at, updated_at) values (?, ?, ?, ?, ?)"); $$s->execute(["base44_seed_done", "1", "general", $$now, $$now]); } catch (Throwable $$e) { fwrite(STDERR, $$e->getMessage()."\n"); exit(1); }'
+        else
+          echo 'setup: seed data already present — skipping'
+        fi
+
+        php artisan route:clear >/dev/null
+        php artisan view:clear >/dev/null
+        echo 'setup: done'
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      base44.project: "Setup (deps, migrate, seed)"
+      base44.kind: worker
+
+  app:
+    <<: *php-service
+    restart: on-failure
+    command:
+      - sh
+      - -ec
+      - |
+        for i in $$(seq 1 60); do
+          if [ -f public/build/manifest.json ] || [ -f public/build/.vite/manifest.json ]; then break; fi
+          sleep 2
+        done
+        exec php artisan serve --host=0.0.0.0 --port=8000
+    ports:
+      - "3000:8000"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          if ! php -r 'exit(@file_get_contents("http://127.0.0.1:8000/up") === false ? 1 : 0);'; then
+            echo 'app: http /up not responding'; exit 1;
+          fi
+          if ! php -r 'try { new PDO("mysql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE"), getenv("DB_USERNAME"), getenv("DB_PASSWORD")); } catch (Throwable $$e) { exit(1); }'; then
+            echo 'app: database not reachable'; exit 1;
+          fi
+          exit 0
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      base44.project: "DahiMail web (Laravel)"
+      base44.kind: web
+      base44.port: "3000"
+      base44.docs: /docs/api
+
+  worker:
+    <<: *php-service
+    restart: on-failure
+    command: ["php", "artisan", "queue:listen", "--tries=1", "--timeout=0"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan queue:monitor database:default --max=100000 >/dev/null 2>&1 || { echo 'worker: queue backend unreachable'; exit 1; }"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    labels:
+      base44.project: "Queue worker"
+      base44.kind: worker
+
+volumes:
+  db-data:
+  node-modules:
+  composer-vendor:
