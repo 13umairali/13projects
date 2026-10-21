@@ -284,6 +284,16 @@ class AppServiceProvider extends ServiceProvider
         // respect the subdirectory (e.g. /MailTrixy/public)
         URL::forceRootUrl($baseUrl);
 
+        // Base44 sandbox preview only. The app is reached through an HTTPS
+        // reverse proxy, but Laravel does not see the forwarded request as
+        // secure, so url()/asset() produced http:// links on an https page and
+        // the browser blocked the stylesheets and scripts as mixed content.
+        // Force https into generated URLs while previewing; when the variable
+        // is unset (or anything but "1") the original behaviour is unchanged.
+        if (env('BASE44_PREVIEW_MODE') === '1') {
+            URL::forceScheme('https');
+        }
+
         // Shared hosting fix: if storage symlink doesn't exist, use direct path
         $storagePath = public_path('storage');
         if (!is_link($storagePath)) {

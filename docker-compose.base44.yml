@@ -45,6 +45,11 @@ x-app-environment: &app-environment
   # Laravel's artisan serve runs PHP's built-in server: give it a few workers
   # so page assets are not fetched serially.
   PHP_CLI_SERVER_WORKERS: "4"
+  # Provided by the Base44 sandbox. Read (never hardcoded) by
+  # AppServiceProvider to force https on generated URLs, because the preview
+  # is served through an HTTPS reverse proxy that Laravel cannot detect.
+  # Unset/empty in every other environment -> normal scheme detection.
+  BASE44_PREVIEW_MODE:
 
 # The PHP services share one image, the source bind mount and the vendor volume.
 x-php-service: &php-service
@@ -202,7 +207,14 @@ services:
           if [ -f public/build/manifest.json ] || [ -f public/build/.vite/manifest.json ]; then break; fi
           sleep 2
         done
-        exec php artisan serve --host=0.0.0.0 --port=8000
+        # --no-reload is required: without it `artisan serve` withholds every
+        # environment variable except a small allowlist (APP_ENV, PATH, ...)
+        # from the PHP server child process, so the app would fall back to
+        # SQLite instead of the MySQL configuration injected above. The flag's
+        # only other effect is not restarting the server when .env changes,
+        # which never happens here (.env holds just the generated APP_KEY).
+        # It also lets PHP_CLI_SERVER_WORKERS take effect.
+        exec php artisan serve --host=0.0.0.0 --port=8000 --no-reload
     ports:
       - "3000:8000"
     depends_on:
