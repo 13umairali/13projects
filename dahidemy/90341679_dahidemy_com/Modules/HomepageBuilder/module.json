@@ -1,0 +1,11 @@
+{
+    "name": "HomepageBuilder",
+    "alias": "homepagebuilder",
+    "description": "Lets institute admins decide which sections appear on their homepage and in what order, plus a Director's Message content block.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\HomepageBuilder\\Providers\\HomepageBuilderServiceProvider"
+    ],
+    "files": []
+}

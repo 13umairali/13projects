@@ -1,0 +1,23 @@
+{
+    "name": "nwidart/eventenrollment",
+    "description": "Event browsing and enrollment module",
+    "authors": [],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\EventEnrollment\\": "app/",
+            "Modules\\EventEnrollment\\Database\\Factories\\": "database/factories/",
+            "Modules\\EventEnrollment\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\EventEnrollment\\Tests\\": "tests/"
+        }
+    }
+}

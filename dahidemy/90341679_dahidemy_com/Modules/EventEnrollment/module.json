@@ -1,0 +1,11 @@
+{
+    "name": "EventEnrollment",
+    "alias": "eventenrollment",
+    "description": "Public event browsing (upcoming/ongoing/past) with free or paid enrollment, integrated with the existing multi-gateway payment system and applicant notifications.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\EventEnrollment\\Providers\\EventEnrollmentServiceProvider"
+    ],
+    "files": []
+}

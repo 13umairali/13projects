@@ -1,0 +1,23 @@
+{
+    "name": "nwidart/resultpublication",
+    "description": "Teacher-submitted, admin-approved result publications module",
+    "authors": [],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\ResultPublication\\": "app/",
+            "Modules\\ResultPublication\\Database\\Factories\\": "database/factories/",
+            "Modules\\ResultPublication\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\ResultPublication\\Tests\\": "tests/"
+        }
+    }
+}

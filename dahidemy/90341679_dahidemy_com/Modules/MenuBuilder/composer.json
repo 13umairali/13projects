@@ -1,0 +1,23 @@
+{
+    "name": "nwidart/menubuilder",
+    "description": "Custom navigation menu builder module",
+    "authors": [],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\MenuBuilder\\": "app/",
+            "Modules\\MenuBuilder\\Database\\Factories\\": "database/factories/",
+            "Modules\\MenuBuilder\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\MenuBuilder\\Tests\\": "tests/"
+        }
+    }
+}

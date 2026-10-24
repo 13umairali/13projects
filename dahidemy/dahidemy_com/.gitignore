@@ -1,0 +1,29 @@
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+# NOTE: /public/build is intentionally committed. It holds the compiled CSS/JS and
+# self-hosted fonts, so the app runs on hosts without Node/npm (e.g. cPanel).
+# Rebuild with `npm run build` after changing anything under resources/.
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db

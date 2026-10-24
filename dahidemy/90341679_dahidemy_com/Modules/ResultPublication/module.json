@@ -1,0 +1,11 @@
+{
+    "name": "ResultPublication",
+    "alias": "resultpublication",
+    "description": "Teachers submit exam results (online exam link, or an uploaded physical/scanned mark sheet) tied to class/section/subject/exam; an admin approves or rejects before students and parents can see it, with notifications sent on approval.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ResultPublication\\Providers\\ResultPublicationServiceProvider"
+    ],
+    "files": []
+}

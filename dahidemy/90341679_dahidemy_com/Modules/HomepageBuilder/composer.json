@@ -1,0 +1,23 @@
+{
+    "name": "nwidart/homepagebuilder",
+    "description": "Homepage section ordering and Director's Message module",
+    "authors": [],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\HomepageBuilder\\": "app/",
+            "Modules\\HomepageBuilder\\Database\\Factories\\": "database/factories/",
+            "Modules\\HomepageBuilder\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\HomepageBuilder\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "name": "Blog",
+    "alias": "blog",
+    "description": "Institute-managed blog: categories, posts, a public blog listing/detail, and a homepage teaser section.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Blog\\Providers\\BlogServiceProvider"
+    ],
+    "files": []
+}

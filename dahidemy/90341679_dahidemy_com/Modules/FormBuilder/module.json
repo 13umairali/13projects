@@ -1,0 +1,11 @@
+{
+    "name": "FormBuilder",
+    "alias": "formbuilder",
+    "description": "Lets institute admins build custom forms (registration, job application, feedback, etc.) with dynamic fields, publish them, collect submissions, and optionally surface them on the public homepage.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\FormBuilder\\Providers\\FormBuilderServiceProvider"
+    ],
+    "files": []
+}

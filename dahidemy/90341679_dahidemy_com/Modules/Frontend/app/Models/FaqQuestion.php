@@ -1,0 +1,26 @@
+<?php
+
+namespace Modules\Frontend\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class FaqQuestion extends Model
+{
+    use HasFactory;
+
+    protected $table = 'faq_questions';
+
+    public const TABLE_NAME = 'faq_questions';
+
+    protected $fillable = [
+        'institute_id',
+        'branch_id',
+        'question',
+        'answer',
+        'status',
+        'created_by',
+        'created_at',
+        'updated_at',
+    ];
+}

@@ -1,0 +1,11 @@
+{
+    "name": "MenuBuilder",
+    "alias": "menubuilder",
+    "description": "Lets institute admins fully control their public site's navigation menu — add, remove, reorder, and nest items, pointing anywhere (a built-in page, a homepage section, or any custom URL) — without editing code.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\MenuBuilder\\Providers\\MenuBuilderServiceProvider"
+    ],
+    "files": []
+}

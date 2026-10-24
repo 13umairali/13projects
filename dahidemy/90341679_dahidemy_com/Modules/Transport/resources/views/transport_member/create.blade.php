@@ -1,0 +1,152 @@
+@extends('layouts.backend')
+
+@section('page_title_breadcrumb')
+    {{ _lang('Create Transport Member') }}
+@endsection
+
+@section('content')
+    <form action="{{ route('transport-members.store') }}" method="POST">
+
+        @csrf
+
+        <div class="row">
+
+            {{-- MEMBER TYPE --}}
+            <div class="col-lg-6">
+                <label class="my-2">{{ _lang('Member Type') }}</label>
+
+                <select name="member_type" id="member_type_select" class="form-control">
+                    <option value="student">{{ _lang('Student') }}</option>
+                    <option value="staff">{{ _lang('Staff / Conductor') }}</option>
+                </select>
+                <div class="form-text">
+                    {{ _lang('A Conductor rides the route but is not billed a fare.') }}
+                </div>
+            </div>
+
+            <div class="col-lg-6"></div>
+
+            {{-- STUDENT --}}
+            <div class="col-lg-6" id="student_field">
+                <label class="my-2">Student</label>
+
+                <select name="student_id" class="form-control">
+                    <option value="">-- Select Student --</option>
+
+                    @foreach ($students as $student)
+                        <option value="{{ $student->id }}">
+                            {{ $student->first_name }} {{ $student->last_name }}
+                        </option>
+                    @endforeach
+
+                </select>
+            </div>
+
+            {{-- STAFF (Conductor) --}}
+            <div class="col-lg-6" id="staff_field" style="display:none;">
+                <label class="my-2">{{ _lang('Staff / Conductor') }}</label>
+
+                <select name="staff_id" class="form-control">
+                    <option value="">-- Select Staff --</option>
+
+                    @foreach ($staffs as $staff)
+                        <option value="{{ $staff->id }}">
+                            {{ $staff->name }}
+                        </option>
+                    @endforeach
+
+                </select>
+            </div>
+
+
+
+            {{-- ROUTE --}}
+            <div class="col-lg-6">
+                <label class="my-2">Route</label>
+
+                <select name="assigned_route_id" class="form-control" required>
+                    <option value="">-- Select Route --</option>
+
+                    @foreach ($routes as $route)
+                        <option value="{{ $route->id }}">
+                            {{ $route->route_name }}
+                        </option>
+                    @endforeach
+
+                </select>
+            </div>
+
+
+
+            {{-- STOP --}}
+            <div class="col-lg-6">
+                <label class="my-2">Stop</label>
+
+                <select name="assigned_stop_id" class="form-control" required>
+                    <option value="">-- Select Stop --</option>
+
+                    @foreach ($stops as $stop)
+                        <option value="{{ $stop->id }}">
+                            {{ $stop->stop_name }}
+                        </option>
+                    @endforeach
+
+                </select>
+            </div>
+
+
+
+            {{-- FARE --}}
+            <div class="col-lg-6" id="fare_field">
+                <label class="my-2">Fare Amount</label>
+
+                <input type="number" step="0.01" name="fare_amount" id="fare_amount_input" class="form-control"
+                    placeholder="Enter fare amount">
+            </div>
+
+
+
+            {{-- STATUS --}}
+            <div class="col-lg-6">
+                <label class="my-2">Status</label>
+
+                <select name="status" class="form-control">
+
+                    <option value="1">Active</option>
+                    <option value="2">Inactive</option>
+
+                </select>
+
+            </div>
+
+
+        </div>
+
+
+        <button class="btn btn-primary mt-4">
+            Create Member
+        </button>
+
+    </form>
+
+    <script>
+        (function() {
+            var typeSelect = document.getElementById('member_type_select');
+            var studentField = document.getElementById('student_field');
+            var staffField = document.getElementById('staff_field');
+            var fareField = document.getElementById('fare_field');
+            var fareInput = document.getElementById('fare_amount_input');
+
+            function toggle() {
+                var isStaff = typeSelect.value === 'staff';
+                studentField.style.display = isStaff ? 'none' : '';
+                staffField.style.display = isStaff ? '' : 'none';
+                fareField.style.display = isStaff ? 'none' : '';
+                fareInput.required = ! isStaff;
+            }
+
+            typeSelect.addEventListener('change', toggle);
+            toggle();
+        })();
+    </script>
+@endsection

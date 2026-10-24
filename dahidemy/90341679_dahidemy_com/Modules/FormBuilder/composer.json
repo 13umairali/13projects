@@ -1,0 +1,23 @@
+{
+    "name": "nwidart/formbuilder",
+    "description": "Dynamic form builder module",
+    "authors": [],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\FormBuilder\\": "app/",
+            "Modules\\FormBuilder\\Database\\Factories\\": "database/factories/",
+            "Modules\\FormBuilder\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\FormBuilder\\Tests\\": "tests/"
+        }
+    }
+}

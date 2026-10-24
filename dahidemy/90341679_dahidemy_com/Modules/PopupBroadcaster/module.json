@@ -1,0 +1,11 @@
+{
+    "name": "PopupBroadcaster",
+    "alias": "popupbroadcaster",
+    "description": "Lets institute admins broadcast scheduled popups on the public website — exam reminders, admission openings, class start notices, or any announcement with an optional link.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PopupBroadcaster\\Providers\\PopupBroadcasterServiceProvider"
+    ],
+    "files": []
+}

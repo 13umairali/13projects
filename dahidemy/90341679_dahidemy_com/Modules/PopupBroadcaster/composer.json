@@ -1,0 +1,23 @@
+{
+    "name": "nwidart/popupbroadcaster",
+    "description": "Website popup/announcement broadcaster module",
+    "authors": [],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\PopupBroadcaster\\": "app/",
+            "Modules\\PopupBroadcaster\\Database\\Factories\\": "database/factories/",
+            "Modules\\PopupBroadcaster\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\PopupBroadcaster\\Tests\\": "tests/"
+        }
+    }
+}
