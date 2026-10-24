@@ -1,0 +1,16 @@
+{
+  "name": "stocky-saas-zapier",
+  "version": "1.0.0",
+  "description": "Zapier integration app for Stocky SaaS (triggers via REST hooks, create/search actions).",
+  "main": "index.js",
+  "scripts": {
+    "test": "zapier validate"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "zapier-platform-core": "15.19.0"
+  },
+  "private": true
+}
