@@ -1,0 +1,52 @@
+@import "../../bootstrap/variables";
+
+.jobs-board-section {
+    background-color: var(--section-bg);
+    border-radius: 48px;
+
+    &__circle-dot-separator {
+        width: 4px;
+        height: 4px;
+        border-radius: 2px;
+        opacity: 0.5;
+        background-color: var(--white);
+
+        &:last-child {
+            display: none;
+        }
+    }
+
+    &__floating-image {
+        position: absolute;
+        bottom: 120px;
+        left: 0;
+        width: 208px;
+        height: 208px;
+        transform: translateX(-50%);
+
+        .rtl & {
+            left: auto;
+            right: 0;
+            transform: translateX(50%);
+        }
+
+        img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        @media (max-width: $screen-xs-max) {
+            display: none;
+        }
+    }
+
+    &__bottom-image {
+        width: 100%;
+        height: 336px;
+
+        &, & img {
+            border-radius: 0 0 48px 48px;
+        }
+    }
+}
+

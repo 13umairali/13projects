@@ -1,0 +1,262 @@
+/**
+ * Public Chat Panel JavaScript
+ *
+ * Configuration must be set before loading this script:
+ * window.publicChatConfig = {
+ *   activeConversationId: number|null,
+ *   currentUserId: number,
+ *   lastMessageId: number,
+ *   translations: {
+ *     noConversations: string
+ *   }
+ * }
+ */
+
+(function () {
+    var config = window.publicChatConfig || {};
+    var activeConvId = config.activeConversationId || 0;
+    var currentUserId = config.currentUserId || 0;
+    var lastMessageId = config.lastMessageId || 0;
+    var translations = config.translations || {};
+    var csrfToken = document.querySelector('meta[name="csrf-token"]');
+
+    // Scroll messages to bottom on load
+    var conversationsCard = document.getElementById('conversationsCard');
+    if (conversationsCard) {
+        var scrollEl = conversationsCard.querySelector('.simplebar-content-wrapper') || conversationsCard;
+        setTimeout(function () {
+            scrollEl.scrollTop = scrollEl.scrollHeight;
+        }, 100);
+    }
+
+    // ============================
+    // Search / Filter Conversations
+    // ============================
+    window.filterConversations = function () {
+        var search = document.getElementById('convSearch').value.toLowerCase();
+        var items = document.querySelectorAll('.support-conversation-item');
+        items.forEach(function (item) {
+            var name = (item.getAttribute('data-name') || '').toLowerCase();
+            item.closest('a').style.display = name.indexOf(search) !== -1 ? '' : 'none';
+        });
+    };
+
+    // ============================
+    // Reply Functions
+    // ============================
+    window.setReply = function (btn) {
+        var msgEl = btn.closest('.pchat-msg-wrap');
+        var msgId = msgEl.getAttribute('data-id');
+        var senderName = msgEl.getAttribute('data-sender');
+        var text = msgEl.getAttribute('data-text');
+
+        document.getElementById('replyToId').value = msgId;
+        document.getElementById('replyBarName').textContent = senderName;
+        document.getElementById('replyBarText').textContent = text;
+        document.getElementById('replyBar').classList.add('active');
+        document.getElementById('replyInput').focus();
+    };
+
+    window.cancelReply = function () {
+        document.getElementById('replyToId').value = '';
+        document.getElementById('replyBar').classList.remove('active');
+    };
+
+    // ============================
+    // Live Sidebar Refresh (polls every 2s)
+    // ============================
+    function refreshSidebar() {
+        fetch('/panel/public-chat/conversations-list?active=' + activeConvId, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.conversations) return;
+
+            var container = document.getElementById('conversationList');
+            if (!container) return;
+
+            var simplebarContent = container.querySelector('.simplebar-content');
+            var target = simplebarContent || container;
+
+            var searchVal = '';
+            var searchInput = document.getElementById('convSearch');
+            if (searchInput) {
+                searchVal = (searchInput.value || '').toLowerCase();
+            }
+
+            if (data.conversations.length === 0) {
+                var noConv = document.getElementById('noConversations');
+                if (!noConv) {
+                    target.innerHTML = '<div class="text-center py-40 text-gray-500 font-12" id="noConversations">' + (translations.noConversations || 'No conversations') + '</div>';
+                }
+                return;
+            }
+
+            var html = '';
+            data.conversations.forEach(function (conv) {
+                var isActive = conv.is_active ? ' active' : '';
+                var display = (searchVal && conv.other_name.toLowerCase().indexOf(searchVal) === -1) ? ' style="display:none"' : '';
+
+                html += '<a href="/panel/public-chat/' + conv.id + '" class="js-conversation-lists"' + display + '>';
+                html += '<div class="d-flex align-items-center px-16 py-12 support-conversation-item' + isActive + '" data-id="' + conv.id + '" data-name="' + conv.other_name + '">';
+                html += '<div class="size-48 rounded-circle mb-16 bg-gray-200">';
+                html += '<img src="' + conv.other_avatar + '" alt="" class="js-avatar-img img-cover rounded-circle">';
+                html += '</div>';
+                html += '<div class="ml-8 flex-1 min-width-0">';
+                html += '<h6 class="font-14 text-dark">' + conv.other_name + '</h6>';
+                if (conv.latest_message) {
+                    html += '<p class="font-12 mt-6 text-gray-500" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + conv.latest_message + '</p>';
+                }
+                html += '<div class="d-flex align-items-center mt-8">';
+                html += '<span class="font-12 text-gray-500" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;">' + conv.source_title + '</span>';
+                if (conv.latest_date) {
+                    html += '<span class="size-4 rounded-circle bg-gray-300 mx-8 flex-shrink-0"></span>';
+                    html += '<span class="font-12 text-gray-500 flex-shrink-0">' + conv.latest_date + '</span>';
+                }
+                html += '</div>';
+                html += '</div>';
+                if (conv.unread > 0) {
+                    html += '<span class="d-flex-center size-24 rounded-circle bg-primary font-10 text-white font-weight-bold flex-shrink-0">' + conv.unread + '</span>';
+                }
+                html += '</div>';
+                html += '</a>';
+            });
+
+            target.innerHTML = html;
+        })
+        .catch(function () {});
+    }
+
+    setInterval(refreshSidebar, 2000);
+
+    // ============================
+    // Chat Messages (only if active conversation)
+    // ============================
+    if (activeConvId > 0) {
+        var chatMessages = conversationsCard;
+        var replyInput = document.getElementById('replyInput');
+        var sendReplyBtn = document.getElementById('sendReplyBtn');
+        var replyToIdInput = document.getElementById('replyToId');
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+
+        function formatTime(dateStr) {
+            var date = new Date(dateStr);
+            return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+        }
+
+        function scrollToBottom() {
+            if (chatMessages) {
+                var scrollEl = chatMessages.querySelector('.simplebar-content-wrapper') || chatMessages;
+                scrollEl.scrollTop = scrollEl.scrollHeight;
+            }
+        }
+
+        function sendReply() {
+            if (!replyInput) return;
+            var message = replyInput.value.trim();
+            if (!message) return;
+
+            var replyToId = replyToIdInput ? replyToIdInput.value || null : null;
+
+            replyInput.value = '';
+            window.cancelReply();
+
+            fetch('/panel/public-chat/' + activeConvId + '/reply', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken ? csrfToken.content : '',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ message: message, reply_to_id: replyToId })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    pollMessages();
+                }
+            })
+            .catch(function (err) { console.error(err); });
+        }
+
+        if (sendReplyBtn) {
+            sendReplyBtn.addEventListener('click', sendReply);
+        }
+
+        if (replyInput) {
+            replyInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); sendReply(); }
+            });
+        }
+
+        function pollMessages() {
+            fetch('/panel/public-chat/' + activeConvId + '/messages?after=' + lastMessageId, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.messages && data.messages.length > 0) {
+                    var emptyState = document.getElementById('emptyState');
+                    if (emptyState) emptyState.remove();
+
+                    var appendTarget = chatMessages;
+                    if (chatMessages) {
+                        var sbContent = chatMessages.querySelector('.simplebar-content');
+                        if (sbContent) appendTarget = sbContent;
+                    }
+
+                    data.messages.forEach(function (msg) {
+                        if (msg.id > lastMessageId) {
+                            var wrapClass = msg.sender_id == currentUserId ? 'pchat-msg-wrap--mine' : 'pchat-msg-wrap--theirs';
+
+                            var wrap = document.createElement('div');
+                            wrap.className = 'pchat-msg-wrap ' + wrapClass;
+                            wrap.setAttribute('data-id', msg.id);
+                            wrap.setAttribute('data-sender', msg.sender_name);
+                            wrap.setAttribute('data-text', msg.message.substring(0, 80));
+
+                            var html = '';
+
+                            // Header (name + time) outside bubble
+                            html += '<div class="pchat-msg__header">';
+                            html += '<span class="pchat-msg__sender">' + escapeHtml(msg.sender_name) + '</span>';
+                            html += '<span class="pchat-msg__time">' + msg.created_at + '</span>';
+                            html += '</div>';
+
+                            // Bubble
+                            html += '<div class="pchat-msg__bubble">';
+                            if (msg.reply_to) {
+                                html += '<div class="pchat-msg__quoted">';
+                                html += '<div class="pchat-msg__quoted-name">' + escapeHtml(msg.reply_to.sender_name) + '</div>';
+                                html += '<div class="pchat-msg__quoted-text">' + escapeHtml(msg.reply_to.message) + '</div>';
+                                html += '</div>';
+                            }
+                            html += '<div>' + escapeHtml(msg.message) + '</div>';
+                            html += '</div>';
+
+                            // Actions
+                            html += '<div class="pchat-msg__actions">';
+                            html += '<button class="pchat-msg__reply-btn" onclick="setReply(this)">Reply</button>';
+                            html += '</div>';
+
+                            wrap.innerHTML = html;
+                            appendTarget.appendChild(wrap);
+                            lastMessageId = msg.id;
+                        }
+                    });
+                    scrollToBottom();
+                }
+            })
+            .catch(function () {});
+        }
+
+        setInterval(pollMessages, 1500);
+    }
+})();

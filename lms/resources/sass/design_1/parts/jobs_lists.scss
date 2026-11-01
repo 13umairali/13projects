@@ -1,0 +1,248 @@
+@import "../bootstrap/variables";
+
+.jobs-lists-hero {
+    padding-top: 120px;
+    padding-bottom: 112px;
+
+    &__bg-wrapper {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-position: center;
+        z-index: 1;
+    }
+
+    &__title {
+        font-size: 64px;
+        line-height: 80px;
+    }
+
+    &__badge-box {
+        position: absolute;
+        top: -5px;
+        right: 80px;
+        transform: rotate(20deg);
+        z-index: 1;
+
+        .rtl & {
+            right: auto;
+            left: 32px;
+        }
+
+        @media (max-width: $screen-sm-max) {
+            top: 0;
+            right: -16px;
+
+            .rtl & {
+                right: auto;
+                left: -16px;
+            }
+        }
+    }
+
+    &__search-box {
+
+        &-mask {
+            position: absolute;
+            inset: -8px;
+            border-radius: 50px;
+            background-color: var(--white);
+            opacity: 0.2;
+        }
+
+        form {
+            width: 100%;
+            height: 72px;
+
+            input {
+                height: 72px;
+                flex: 1;
+                border: none;
+                background-color: transparent;
+                padding: 8px;
+            }
+        }
+    }
+
+    &__circle-dot-separator {
+        width: 4px;
+        height: 4px;
+        border-radius: 2px;
+        background-color: var(--gray-500);
+
+        &:last-child {
+            display: none;
+        }
+    }
+
+    &__floating-image-1 {
+        position: absolute;
+        top: 50%;
+        right: 0;
+        width: 240px;
+        height: 240px;
+        transform: translate(50%, -50%);
+        z-index: 4;
+
+        .rtl & {
+            right: auto;
+            left: 0;
+            transform: translate(-50%, -50%);
+        }
+    }
+
+    &__floating-image-2 {
+        position: absolute;
+        bottom: -52px; // padding-bottom112 - 52 = 60 from bottom
+        left: 0;
+        width: 200px;
+        height: 200px;
+        transform: translateX(-50%);
+        z-index: 4;
+
+        .rtl & {
+            left: auto;
+            right: 0;
+            transform: translateX(50%);
+        }
+    }
+
+    @media (max-width: $screen-sm-max) {
+        padding-top: 60px;
+        padding-bottom: 54px;
+    }
+}
+
+.jobs-lists-header {
+    top: -119px;
+    margin-bottom: -119px;
+    z-index: 5;
+
+    &__mask {
+        position: absolute;
+        inset: 8px;
+        bottom: -8px;
+        border-radius: 32px;
+        opacity: 0.5;
+        background: var(--white);
+        z-index: 1;
+    }
+
+    &__overlay-img {
+        width: 280px;
+        height: 280px;
+        position: absolute;
+        right: 16px;
+        bottom: 16px;
+        top: auto;
+
+        @media (max-width: $screen-sm-max) {
+            width: 140px;
+            height: 140px;
+            bottom: auto;
+            top: 0;
+        }
+
+        .rtl & {
+            right: auto;
+            left: 16px;
+        }
+    }
+}
+
+.jobs-lists-filters {
+
+    &__mask {
+        position: absolute;
+        inset: 8px;
+        bottom: -8px;
+        border-radius: 16px;
+        opacity: 0.5;
+        background: var(--white);
+        z-index: 1;
+    }
+
+    .jobs-lists-sort-input {
+        width: 220px;
+    }
+
+}
+
+.jobs-lists-featured {
+
+    &__mask {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        bottom: -8px;
+        border-radius: 16px;
+        background-color: var(--primary);
+        opacity: 0.5;
+        z-index: 1;
+    }
+
+
+    &__slider-navigation {
+        position: absolute;
+        top: 30% !important;
+        width: 40px !important;
+        height: 40px !important;
+
+        &.swiper-button-next {
+            right: 38px !important;
+        }
+
+        &.swiper-button-prev {
+            left: 38px !important;
+        }
+
+        &:after {
+            display: none !important;
+        }
+    }
+
+    &__avatar {
+        position: relative;
+
+        img {
+            z-index: 3;
+        }
+
+        &:before, &:after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+        }
+
+        &:before {
+            width: 96px;
+            height: 96px;
+            background-color: var(--primary);
+            z-index: 2;
+        }
+
+        &:after {
+            width: 104px;
+            height: 104px;
+            background-color: rgb(217, 217, 217);
+            opacity: .5;
+            z-index: 1;
+        }
+    }
+
+    &__divider {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 1px;
+        height: 32px;
+        opacity: 0.3;
+        background: var(--white);
+    }
+}
