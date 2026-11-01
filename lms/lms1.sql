@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Nov 01, 2026 at 05:12 PM
+-- Generation Time: Nov 01, 2026 at 07:00 PM
 -- Server version: 10.11.19-MariaDB-ubu2404
 -- PHP Version: 8.3.36
 
@@ -9241,6 +9241,13 @@ CREATE TABLE `purchase_code` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `purchase_code`
+--
+
+INSERT INTO `purchase_code` (`id`, `code`, `product_type`, `license_type`, `created_at`, `updated_at`) VALUES
+(1, '824babcc-d1f8-48a2-a1c8-1e1ce35d2086', 'main', 'regular license', '2025-10-01 11:22:59', '2025-10-01 11:22:59');
 
 -- --------------------------------------------------------
 
@@ -19606,7 +19613,7 @@ ALTER TABLE `purchases`
 -- AUTO_INCREMENT for table `purchase_code`
 --
 ALTER TABLE `purchase_code`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `purchase_notifications`
